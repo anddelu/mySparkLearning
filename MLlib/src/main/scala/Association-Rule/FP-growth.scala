@@ -28,10 +28,7 @@ import org.apache.spark.mllib.fpm._
 val fpg = new FPGrowth().setMinSupport(0.01).setNumPartitions(10)
 val model = fpg.run(examples)
 
-
 //examples.unpersist()
-
-
 
 
 println(s"Number of frequent itemsets: ${model.freqItemsets.count()}")
