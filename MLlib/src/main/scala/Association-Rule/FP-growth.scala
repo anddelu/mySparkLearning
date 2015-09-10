@@ -79,6 +79,8 @@ def showGenerListSupport(comStr: List[String]): Double = itemsMapSupport.get(com
 	 case None => 1.0
 	 }
 
+case class fpResult(comA: List[String], comAB: List[String], comB: List[String], frequencyAB: Int, confA2B: Double, supportB: Double, liftB: Double)
+
 val ruleCollect = 	 
 for {
      i <- itemsAndSupport
@@ -88,7 +90,8 @@ for {
 	 val gList = generList(i._1, j._1)
 	 val gListSupport = showGenerListSupport(gList)
 	 }
-yield fpResult(i._1, j._1, gList, itemsMapFrequency(j._1), j._2 / i._2, gListSupport, j._2 / (i._2 * gListSupport) )  
+yield fpResult(i._1, j._1, gList, itemsMapFrequency(j._1),  "%.3f".format(j._2 / i._2).toDouble,  "%.3f".format(gListSupport).toDouble, "%.2f".format(j._2 / (i._2 * gListSupport)).toDouble ) 
+//yield fpResult(i._1, j._1, gList, itemsMapFrequency(j._1), j._2 / i._2, gListSupport, j._2 / (i._2 * gListSupport) )  
 
 ruleCollect.map(a => (a.comA, a.comB, a.comAB, a.frequencyAB, a.confA2B, a.supportB, a.liftB)).foreach(println)
 
