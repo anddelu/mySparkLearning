@@ -29,7 +29,7 @@ val fpg = new FPGrowth().setMinSupport(0.01).setNumPartitions(10)
 val model = fpg.run(examples)
 
 
-examples.unpersist()
+//examples.unpersist()
 
 
 
@@ -39,12 +39,14 @@ model.freqItemsets.collect().foreach { itemset =>
   println(itemset.items.mkString("[", ",", "]") + ", " + itemset.freq + ", " + (itemset.freq*1.0/totalExamples))
 }
 
+/*
 model.freqItemsets.collect().foreach(itemset => println(itemset.items.mkString("(", ",", ")")))
 model.freqItemsets.collect().foreach(itemset => println(itemset.freq))
 
 model.freqItemsets.collect().foreach { itemset =>
   println(List(itemset.items.mkString("(", ",", ")") + ", " + itemset.freq + ", " + BigDecimal(itemset.freq*1.0/totalExamples).setScale(3, BigDecimal.RoundingMode.HALF_UP).toDouble))
 }
+*/
 
 
 val fpitems = 
