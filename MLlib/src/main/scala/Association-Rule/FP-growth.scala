@@ -69,15 +69,15 @@ def isSafe(comA: List[String], comB: List[String]): Boolean = {
 def generList(comA: List[String], comB: List[String]) = {
      for {
 	      i <- comB
-		  if ! (comA contains i)
-		  }
+	      if ! (comA contains i)
+	  }
          yield i
      }	
 
 def showGenerListSupport(comStr: List[String]): Double = itemsMapSupport.get(comStr) match {
      case Some(supp) => supp
-	 case None => 1.0
-	 }
+     case None => 1.0
+    }
 
 case class fpResult(comA: List[String], comAB: List[String], comB: List[String], frequencyAB: Int, confA2B: Double, supportB: Double, liftB: Double)
 
@@ -85,11 +85,11 @@ val ruleCollect =
 for {
      i <- itemsAndSupport
      j <- itemsAndSupport
-	 if isSafe(i._1, j._1)
-	 if j._2 / i._2 > minConfindence
-	 val gList = generList(i._1, j._1)
-	 val gListSupport = showGenerListSupport(gList)
-	 }
+     if isSafe(i._1, j._1)
+     if j._2 / i._2 > minConfindence
+     val gList = generList(i._1, j._1)
+     val gListSupport = showGenerListSupport(gList)
+    }
 yield fpResult(i._1, j._1, gList, itemsMapFrequency(j._1),  "%.3f".format(j._2 / i._2).toDouble,  "%.3f".format(gListSupport).toDouble, "%.2f".format(j._2 / (i._2 * gListSupport)).toDouble ) 
 //yield fpResult(i._1, j._1, gList, itemsMapFrequency(j._1), j._2 / i._2, gListSupport, j._2 / (i._2 * gListSupport) )  
 
