@@ -1,3 +1,3 @@
 # mySparkLearning
-articles about scala、spark
-the way has began
+articles about scala、spark.
+the hard way has began.
