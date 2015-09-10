@@ -52,6 +52,7 @@ for (itemset <- model.freqItemsets.collect())
 
 val fpitemsTrans = fpitems.map(_.split(","))
 val items = fpitemsTrans.map(a => a.toList.take(a.length-2))
+def distinctItems = items.flatten.distinct
 val Support = fpitemsTrans.map(a => a(a.length-1).toFloat)
 val Frequency = fpitemsTrans.map(a => a(a.length-2).toInt)
 val itemsAndSupport = items.zip(Support)
