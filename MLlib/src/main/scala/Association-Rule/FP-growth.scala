@@ -23,9 +23,10 @@ val examples = rdd22.map(_.split(",")).cache()
 //rdd22.unpersist()
 
 val totalExamples = examples.count()
+val minSupport = 0.01
 
 import org.apache.spark.mllib.fpm._
-val fpg = new FPGrowth().setMinSupport(0.01).setNumPartitions(10)
+val fpg = new FPGrowth().setMinSupport(minSupport).setNumPartitions(10)
 val model = fpg.run(examples)
 
 //examples.unpersist()
@@ -56,7 +57,7 @@ val Frequency = fpitemsTrans.map(a => a(a.length-2).toInt)
 val itemsAndSupport = items.zip(Support)
 val itemsMapSupport = items.zip(Support).toMap
 val itemsMapFrequency = items.zip(Frequency).toMap
-val minSupport = 0.60
+val minConfindence = 0.60
 
 def isSafe(comA: List[String], comB: List[String]): Boolean = {
       if (comA.length < comB.length)
@@ -82,7 +83,7 @@ for {
      i <- itemsAndSupport
      j <- itemsAndSupport
 	 if isSafe(i._1, j._1)
-	 if j._2 / i._2 > minSupport
+	 if j._2 / i._2 > minConfindence
 	 val gList = generList(i._1, j._1)
 	 val gListSupport = showGenerListSupport(gList)
 	 }
