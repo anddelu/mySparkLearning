@@ -58,7 +58,7 @@ val Frequency = fpitemsTrans.map(a => a(a.length-2).toInt)
 val itemsAndSupport = items.zip(Support)
 val itemsMapSupport = items.zip(Support).toMap
 val itemsMapFrequency = items.zip(Frequency).toMap
-val minConfindence = 0.60
+val minConfidence = 0.60
 
 def isSafe(comA: List[String], comB: List[String]): Boolean = {
       if (comA.length < comB.length)
@@ -86,7 +86,7 @@ for {
      i <- itemsAndSupport
      j <- itemsAndSupport
 	 if isSafe(i._1, j._1)
-	 if j._2 / i._2 > minConfindence
+	 if j._2 / i._2 > minConfidence
 	 val gList = generList(i._1, j._1)
 	 val gListSupport = showGenerListSupport(gList)
 	 val j1Support = itemsMapSupport(j._1)
