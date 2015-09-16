@@ -91,12 +91,12 @@ val ruleCollect =
 for {
      i <- itemsAndSupport
      j <- itemsAndSupport
-	 if isSafe(i._1, j._1)
-	 if j._2 / i._2 > minConfidence
-	 val gList = generList(i._1, j._1)
-	 val gListSupport = showGenerListSupport(gList)
-	 val j1Support = itemsMapSupport(j._1)
-	 }
+     if isSafe(i._1, j._1)
+     if j._2 / i._2 > minConfidence
+     val gList = generList(i._1, j._1)
+     val gListSupport = showGenerListSupport(gList)
+     val j1Support = itemsMapSupport(j._1)
+    }
 yield fpResult(i._1, j._1, gList, itemsMapFrequency(j._1), "%.3f".format(j1Support).toDouble, "%.3f".format(j._2 / i._2).toDouble, "%.3f".format(gListSupport).toDouble, "%.2f".format(j._2 / (i._2 * gListSupport)).toDouble ) 
 
 //ruleCollect.map(a => (a.comA, a.comB, a.comAB, a.frequencyAB, a.supportAB, a.confA2B, a.supportB, a.liftB)).foreach(println)
