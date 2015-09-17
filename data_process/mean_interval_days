@@ -1,11 +1,11 @@
 /**
   *要求示例为相同Key：[2015-07-01, 2015-08-06, 2015-09-10]的相邻时间之差的平均值，即 ((08-06 - 07-01) + (09-10 -08-06)) * 1.0 / 2
   *原始数据集为： 
-  *             1100 2015-07-01
-  *             1200 2015-08-08
-  *             1100 2015-08-06
+  *             1100 2015-08-01 00:00:00
+  *             1200 2015-08-08 00:00:00 
+  *             1100 2015-08-06 00:00:00
+  *             1100 2015-08-03 00:00:00
   *目前数据处理的程序环境为：spark shell
-  *还有些问题，对于reduceByKey的结果，要排序，从小到大
   */
   
 ./bin/spark-shell --driver-memory 3g		 
@@ -17,7 +17,7 @@ rdd11.first._2.split(",")                                        //简单查看
 
 //产生新的包含两个值的List
 def generList2Len(strSource: String) = {
-  val tranSplit = strSource.split(",")
+  val tranSplit = strSource.split(",").sorted                    //对于split的结果，要排序，从小到大
   val tranLength = tranSplit.length
   for (i <- 0 until tranLength-1)
     yield List(tranSplit(i), tranSplit(i+1))
