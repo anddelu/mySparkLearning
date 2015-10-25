@@ -1,5 +1,5 @@
 
-爱网贷的数据处理
+
 
 //val rawData = sc.textFile("hdfs:///user/test/input/1000.txt")
 val rawData = sc.textFile("hdfs:///user/test/input/4500.txt")
