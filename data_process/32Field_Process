@@ -1,0 +1,809 @@
+
+爱网贷的数据处理
+
+//val rawData = sc.textFile("hdfs:///user/test/input/1000.txt")
+val rawData = sc.textFile("hdfs:///user/test/input/4500.txt")
+val testData = rawData.toArray
+
+val wwwIndex = List(""","http://www.iwdai.com",""",""","http://www.apengdai.com",""",""","https://www.twotiger.com",""")
+
+val trueIndex = wwwIndex.map(ind => testData.map(_ contains ind).zipWithIndex.filter{ case(a, b) => a })
+val beginTrueIndex = trueIndex.map(x => x(0)).map(a => a._2)
+val endTrueIndex = beginTrueIndex.slice(1,beginTrueIndex.length) :+ testData.length
+val singleLineResult = 
+endTrueIndex.zip(trueIndex).flatMap{ a => 
+  var everyWIndex = a._2.map(b => b._2)
+  var everyWIndLen = everyWIndex.length 
+  var endWBound = everyWIndex.zip(everyWIndex.slice(1, everyWIndLen) :+ a._1)
+  endWBound.map(x => testData.slice(x._1, x._2).mkString(""))
+  }
+
+//var test = singleLineResult.slice(4335, 4336).map(x => x.split(",")).flatten 
+//test.map(_ replaceAll("""\\N""", """"NA"""")).map(a => a startsWith """"""").zipWithIndex
+  
+val singleFieldResult = 
+singleLineResult.map{ strLine => 
+  var singleLine = strLine.split(",")
+  var singleLIndex = singleLine.map(a => a.length).zipWithIndex
+  var replaceN = singleLine.map(_ replaceAll("""\\N""", """"NA"""")).map(a => a startsWith """"""").zipWithIndex
+  var tureFilter = replaceN.filter {case (a, b) => a}
+  var tureInd = tureFilter.map(a => a._2).zip(tureFilter.map(a => a._2).slice(1, tureFilter.length) :+ singleLine.length)
+  tureInd.map(a => singleLine.slice(a._1, a._2).mkString(""))
+  }
+
+//下面是简单的验证
+singleFieldResult.map(a => a.length).filter(b => b == 32).length
+singleFieldResult.map(a => a(31).replaceAll(" ", "")).distinct
+singleFieldResult.map(a => a(31).replaceAll(" ", "")).distinct.length
+
+/**
+ * 共有32个字段，其中id不需要处理
+ * 数据处理的原则：
+ * 1：对于正常的数据，做相应的转换处理
+ * 2：对于空值的数据，处理为 -1
+ * 3：对于异常的数据，处理为 -2
+id,REPAYTIME,SITE_NAME,SITE_URL,ITEM_NAME,ITEM_AMOUNT,ITEM_STATUS,ITEM_INTRODUCTION,INVEST_PROGRESS,LIFE_LOAN,MONEY_RATE,LOAN_TYPE,LOAN_USE,BONDING_COMPANY,DEADLINE,REPAYTYPE,BORROWER_NAME,BORROWER_SEX,BORROWER_AGE,BORROWER_EDUCATION,BORROWER_MARRIAGE,BORROWER_INDUSTRY,BORROWER_CITY,BORROWER_INCOME,BORROWER_HOUSE,BORROWER_CAR,REWARD,CUR_URL,CREATE_TIME,RELEASETIME,FULLTIME,INTERESTTIME
+ */
+
+/**
+ * 处理不复杂的字段，不对异常数据做判断，即：
+ * 1：对于正常的数据，直接输出
+ * 2：对于"\N"的数据，输出为 -1
+ * 3: 对于 "" 的数据，输出为 -2
+ * @function do_simpleFieldTrans：通常用于异常值难以判断的情况下，默认把异常值作为正常值来看待
+ */ 
+def do_simpleFieldTrans(strline: String) = strline match {
+  case """\N""" => -1
+  case "" => -2
+  case _ => strline
+}
+
+/** @function do_excluMaoHao：去除字符串的冒号", 示例：mylist("2015-10-12") => mylist(2015-10-12) */
+def do_excluMaoHao(strline: String) = {
+  strline.replaceAll(""""""", "").trim()
+}
+ 
+
+/**
+ * @function do_DateSimpleDistill 从字符串中提取两种的时间日期格式，是不完全的：
+ * 1：“2015-01-31 10:11:30”；2：“2015-01-31”
+ * 
+ */
+ 
+/** 不用这个定义的函数来提取时间格式
+def do_DateSimpleDistill(strline: String)  = {
+  val regexDate = "\\d{4}[ /-]{1}\\d{2}[ /-]{1}\\d{2}([ ]{1}\\d{2}[ /:]{1}\\d{2}[ /:]{1}\\d{2})?"
+  val pattDate = Pattern.compile(regexDate)
+  val matchDate = pattDate.matcher(strline)
+  if(matchDate.find()) 
+    matchDate.group(0).toString
+}
+ */
+
+def do_DateSimpleDistill(strline: String)  = {
+  var str = strline.replaceAll("[^(0-9-/: )]","").trim()
+  if (str contains "/")
+    str.replaceAll("/", "-")
+  else
+    str
+}
+
+//示例：
+do_DateSimpleDistill("审核时间：2015-01-31 10:11:30"),   do_DateSimpleDistill("审核时间：2015-01-31 ") 
+do_DateSimpleDistill("审核时间：2015/01/31 10:11:30 ") 
+do_DateSimpleDistill("审核时间："),   singleFieldResult.map(a => do_excluMaoHao(a(1))).map(do_DateSimpleDistill)
+
+/**
+ * 处理REPAYTIME字段，对应a(1)
+ * @function do_dateSimpleDistill_Repay 只是对属于SimpleDateFormat的字符串做简单的检查处理，是不完全的。
+ */
+import java.text.{ParseException, SimpleDateFormat}
+import java.util.regex.{Pattern, Matcher}
+
+val dateFormatRepay = new SimpleDateFormat ("yyyy-MM-dd")
+
+def do_dateSimpleDistill_Repay(strline: String) = strline match {
+  case """\N""" => -1
+  case _ => 
+  try {
+      var str = do_DateSimpleDistill(strline)
+	  var simpleCheck = dateFormatRepay.parse(str)
+	  str
+	}
+	catch {
+	  case _ => -2
+	}
+}
+
+
+//示例： 
+do_dateSimpleDistill_Repay("2012"),      do_dateSimpleDistill_Repay("2015-10-12 10:10:10"), do_dateSimpleDistill_Repay("2015-10-12 10:10:10"),   do_dateSimpleDistill_Repay("""\N"""), do_dateSimpleDistill_Repay("借款时间：2015-10-12")
+singleFieldResult.map(a => do_excluMaoHao(a(1))).map(do_dateSimpleDistill_Repay).filter(_ != -2).length
+
+/**
+ * 处理SITE_NAME,SITE_URL,ITEM_NAME字段，分别对应a(2)、a(3)、a(4)
+ * @function do_simpleFieldTrans：只用于目前认为简单字段的处理
+ */
+ 
+//示例：
+singleFieldResult.map(a => do_excluMaoHao(a(2))).map(do_simpleFieldTrans).distinct
+singleFieldResult.map(a => do_excluMaoHao(a(3))).map(do_simpleFieldTrans).distinct
+singleFieldResult.map(a => do_excluMaoHao(a(4))).map(do_simpleFieldTrans).distinct
+
+  
+/**
+ * 处理ITEM_AMOUNT字段，对应a(5)
+ * @function do_NumberSimpleCheck_ItemAmt 只是对为数字的字符串做简单的检查处理，是不完全的。
+ */
+def do_NumberSimpleCheck_ItemAmt(strline: String) = strline match {
+  case """\N""" => -1
+  case _ => {
+    var istrue = strline.matches("^[-+]?(([0-9]+)([.]([0-9]+))?|([.]([0-9]+))?)$")
+    if (istrue && strline.length > 0) strline 
+    else -2
+  }
+}
+
+//示例：
+do_NumberSimpleCheck_ItemAmt("123.12"), do_NumberSimpleCheck_ItemAmt("""\N"""), do_NumberSimpleCheck_ItemAmt("123ab")
+singleFieldResult.map(a => do_excluMaoHao(a(5))).map(do_NumberSimpleCheck_ItemAmt)
+
+
+先查看下字段ITEM_STATUS的状态
+singleFieldResult.map(a => do_excluMaoHao(a(6))).distinct
+// 字段ITEM_STATUS的处理规则：
+ 1、已还款，已还完，已经完成，还款完成，回款完成，形如“投资人数…… 此项目状态为：完成”：处理为1；
+ 2、还款中，正在还款中，形如“投资人数……还款中”：处理为0.8；
+ 3、已满标，满标复审中，等待复审，等待还款，还剩0份，认购已满，融资结束，募集成功：处理为0.5；
+ 4、即将发布，开放加入，开放预约，立即投标，正在募集，投标中，投资：处理为0.3；
+ 5、审核失败，已过期、已停售、用户取消：处理为0；
+ 6、空值处理为-1；
+ 7、其他没有包含上述内容或相近词义的均为异常，处理为-2；
+
+ /**
+ * 处理ITEM_AMOUNT字段，对应a(6)
+ * @function do_contentSimpleCheck_ItemStatus 只是字符串做简单的检查处理，是不完全的,如果有新的是需要添加的。
+ */
+
+ def do_contentSimpleCheck_ItemStatus(strline: String) = strline match {
+   case """\N""" => -1 
+   case _ => {
+	   if (strline.contains("已还完") || strline.contains("已还款") || strline.contains("已经完成：")
+        || strline.contains("已结束") || (strline.contains("投资人数") && strline.contains("完成")) || strline.contains("已完成") || strline.contains("回款完成"))
+		1
+	   else if (strline.contains("还款中") || (strline.contains("投资人数") && strline.contains("还款中")))
+	   0.8
+	   else if (strline.contains("已满标") || strline.contains("满标复审中") || strline.contains("等待复审")
+        || strline.contains("等待还款") || strline.contains("还剩： 0份") || strline.contains("认购已满") || strline.contains("融资结束") || strline.contains("募集成功"))
+		0.5
+	   else if (strline.contains("即将发布") || strline.contains("开放加入") || strline.contains("开放预约")
+        || strline.contains("立即投标") || strline.contains("正在募集") || strline.contains("投标中") || strline.contains("投资"))
+		0.3
+	   else if (strline.contains("审核失败") || strline.contains("已过期") || strline.contains("已停售")
+        || strline.contains("用户取消")) 
+		0
+	   else -2
+	 }
+ }
+
+ //示例：
+do_contentSimpleCheck_ItemStatus("投资人数a还款中")    do_contentSimpleCheck_ItemStatus("投资人数a完成")
+singleFieldResult.map(a => do_excluMaoHao(a(6))).map(do_contentSimpleCheck_ItemStatus).distinct
+
+/** 处理SITE_NAME字段，对应a(7) 
+ * @function do_simpleFieldTrans：只用于目前认为简单字段的处理
+ */ 
+singleFieldResult.map(a => do_excluMaoHao(a(7))).map(do_simpleFieldTrans).distinct
+
+
+先查看下字段INVEST_PROGRESS的状态
+singleFieldResult.map(a => do_excluMaoHao(a(8))).distinct
+// 字段ITEM_STATUS的处理规则：
+1、形如“**%”，取**，保存为浮点；
+2、不超过100的数值，处理时直接保留；
+3、空值处理为-1；
+4、其他均属异常，处理为-2；
+
+ /**
+ * 处理INVEST_PROGRESS字段，对应a(8)
+ * @function do_NumberSimpleDistill_InvestPro 只是对为数字的字符串做简单的检查处理，是不完全的。
+ */
+
+/** @function do_NumberSimpleDistill 只是简单的从字符串中提取出小数 */
+
+def do_NumberSimpleDistill(strline: String) = {
+  strline.replaceAll("[^0-9.-]","")
+}
+
+def do_NumberSimpleDistill_InvestPro(strline: String) = strline match {
+  case """\N""" => -1
+  case _ => {
+    var str = do_NumberSimpleDistill(strline)
+	if (str.length > 1 && str.toFloat < 100) str.toFloat
+	else -2  
+   }
+}
+
+//示例：
+singleFieldResult.map(a => do_excluMaoHao(a(8))).map(do_NumberSimpleDistill_InvestPro).distinct
+
+
+先查看下字段LIFE_LOAN的状态
+singleFieldResult.map(a => do_excluMaoHao(a(9))).distinct
+// 字段ITEM_STATUS的处理规则：
+1、包含“*个月”形式的,形如“借款期限：*个月”或“回报周期：*个月”等：处理取“个月”前面的数字乘以30，将单位统一为天;
+2、包含“*天”内容，形如“借款期限：*天”等，处理时只提“*天”中的数字即可；
+3、包含“满额即还”：处理为0；
+4、空值处理为-1；
+5、其他均为异常，处理为-2
+
+ /**
+ * 处理LIFE_LOAN字段，对应a(9)
+ * @function do_NumberSimpleDistill_LifeLoan 只是对为数字的字符串做简单的检查处理，是不完全的。
+ */
+
+def do_NumberSimpleDistill_LifeLoan(strline: String) = strline match {
+  case """\N""" => -1
+  case _ => {
+    var str = do_NumberSimpleDistill(strline)
+    if (strline contains "月") 
+	  str.toInt * 30
+	else if (strline contains "天") 
+	  str.toInt
+    else if (strline contains "额满即还") 
+	  0	  
+	else if (str.length > 1)
+	  str.toInt
+	else 
+	  -2
+   }
+}
+
+//示例：
+singleFieldResult.map(a => do_excluMaoHao(a(9))).map(do_NumberSimpleDistill_LifeLoan).distinct
+
+
+先查看下字段MONEY_RATE的状态
+singleFieldResult.map(a => do_excluMaoHao(a(10))).distinct
+// 字段MONEY_RATE的处理规则：
+1、形如“21.6”或“10”之类的数字，处理时直接取数字；
+2、形如“18%”等带百分号的，处理时提取百分号前的数据即可；
+3、形如“12+0.5”：处理时提取‘+’前面的数值，并且把‘+’后面的数字赋值给同一行的“reward”；
+4、形如“0.4日”，处理时取‘日’前面的数字乘以365；
+5、包含“月利率：**%”：处理时提取‘%’前面数字并乘以12即可，注：形如“20.00（月利率1.6667%）”，那么不必考虑括号内的‘月利率’，直接提取20.00即可
+6、11-12.5：这种形式的，取较大值的那个
+7、空值处理为-1；
+8、其他均属异常，处理为-2；
+
+
+ /**
+ * 处理MONEY_RATE字段，对应a(10)
+ * @function do_NumberSimpleDistill_MoneyRate 只是对为数字的字符串做简单的检查处理，是不完全的。
+ */
+ 
+def do_NumberSimpleDistill_MoneyRate(strline: String) = strline match {
+  case """\N""" => -1
+  case _ => {
+    var str = do_NumberSimpleDistill(strline)
+	var istrue = str.matches("^[-+]?(([0-9]+)([.]([0-9]+))?|([.]([0-9]+))?)$")
+    if (strline.contains("月") && strline.contains("日")) 
+	  -2
+	else if (strline.contains("（月利率" ) || strline.contains("(月利率") || strline.contains("(日利率") ) {
+	  var strInd = strline.indexOf("利")
+	  var str = do_NumberSimpleDistill(strline.slice(0, strInd))
+	  str.toFloat
+	  }
+	else if (strline contains "日") {
+	  var str = do_NumberSimpleDistill(strline)
+	  str.toFloat * 365
+	  }
+    else if (strline contains "发布时间") 
+	  -2
+    else if (strline.contains("+")  && strline.contains("-")) {
+	  var strInd = strline.indexOf("-")
+	  var strInd01 = strline.indexOf(")")
+	  var str = do_NumberSimpleDistill(strline.slice(strInd+1, strInd01))
+	  str.toFloat
+	  }
+    else if (strline contains "+" ) {
+	  var strInd = strline.indexOf("+")
+	  var str = do_NumberSimpleDistill(strline.slice(0, strInd))
+	  str.toFloat
+	  }
+	else if (strline contains "-" ) {
+	  var strInd = strline.indexOf("-")
+	  var str = do_NumberSimpleDistill(strline.slice(strInd+1, strline.length))
+	  str.toFloat
+	  }
+	else if (istrue && str.length > 0 ) {
+	  str.toFloat
+	}
+	else 
+	  -2
+   }
+}
+
+//示例：
+do_NumberSimpleDistill_MoneyRate("(10.5-11.5)")              do_NumberSimpleDistill_MoneyRate("(10.5-11.5) +0.50")
+do_NumberSimpleDistill_MoneyRate("10.0+0.5")                 do_NumberSimpleDistill_MoneyRate("15.00（月利率1.25）")
+do_NumberSimpleDistill_MoneyRate("15.00(月利率1.25）")       do_NumberSimpleDistill_MoneyRate("abc123")
+do_NumberSimpleDistill_MoneyRate("abc")                      do_NumberSimpleDistill_MoneyRate("18.00(日利率：0.0492)")
+do_NumberSimpleDistill_MoneyRate("0.10日") 
+singleFieldResult.map(a => do_excluMaoHao(a(10))).map(do_NumberSimpleDistill_MoneyRate).distinct
+
+
+先查看下字段LOAN_TYPE的状态
+singleFieldResult.map(a => do_excluMaoHao(a(11))).distinct
+// 字段LOAN_TYPE的处理规则：
+1、包含“质押”这个词的，处理为0；
+2、包含“信用标”的处理为1；
+3、包含“抵押”的处理为2；
+4、包含“秒标”或“秒还标”处理为3；
+5、包含“体验标”的处理为4；
+6、包含“推荐标”的处理为5；
+7、形如“保证金+第三方担保”，处理为6；
+8、空值处理为-1；
+9、其他均为异常，处理为-2；
+
+
+ /**
+ * 处理LOAN_TYPE字段，对应a(11)
+ * @function do_contentSimpleCheck_LoanType 只是对为数字的字符串做简单的检查处理，是不完全的。
+ */
+
+def do_contentSimpleCheck_LoanType(strline: String) = strline match {
+  case """\N""" => -1
+  case _ => {
+    if (strline.contains("质押")) 
+	  0
+	else if (strline.contains("信用标"))
+	  1
+	else if (strline.contains("抵押"))
+	  2
+	else if (strline.contains("秒标") || strline.contains("秒还标"))
+	  3
+	else if (strline.contains("体验标"))
+	  4
+	else if (strline.contains("推荐标"))
+	  5
+	else if (strline.contains("保证金+第三方担保"))
+	  6
+	else 
+	  -2
+   }
+}
+
+//示例：
+do_contentSimpleCheck_LoanType("保证金+第三方担保")
+singleFieldResult.map(a => do_excluMaoHao(a(11))).map(do_contentSimpleCheck_LoanType).distinct
+
+
+/** 处理LOAN_USE、BONDING_COMPANY字段，分别对应a(12)、a(13)
+ * @function do_simpleFieldTrans：只用于目前认为简单字段的处理
+ */ 
+singleFieldResult.map(a => do_excluMaoHao(a(12))).map(do_simpleFieldTrans).distinct
+singleFieldResult.map(a => do_excluMaoHao(a(13))).map(do_simpleFieldTrans).distinct
+
+
+/**处理DEADLINE、CREATE_TIME、RELEASETIME、FULLTIME、INTERESTTIME字段，分别对应a(14)、a(28)、a(29)、a(30)、a(31)
+ * 这几个字段的缺失值会导致一些复杂，比如 FULLTIME = DEADLINE - RELEASETIME，保证等式右边都有值的情况下才有意义
+ */
+singleFieldResult.map(a => do_excluMaoHao(a(14))).distinct
+singleFieldResult.map(a => do_excluMaoHao(a(14))).map(do_DateSimpleDistill).distinct
+
+/**
+ * @function do_DateSimpleTrans 将一般的日期格式 统一处理成 "yyyy-MM-dd HH:mm:ss"的格式
+ * 一般的日期格式："yyyy-MM-dd"、"yyyy-MM-dd HH:mm:ss"
+ * 其他的日期格式长度在上述两者之间的，则默认保持不变
+ */
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+
+val dateFormatDeaRel = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+val dateFormatCommon = new SimpleDateFormat("yyyy-MM-dd")
+
+val str="2012-12-15 23:22:45"
+val dt=dateFormatDeaRel.parse(str)
+val reStr = dateFormatCommon.format(dt)    //将时间格式转换为指定的字符串格式，本例即从"yyyy-MM-dd HH:mm:ss" => "yyyy-MM-dd"
+
+def do_DateSimpleTrans(strline: String) = strline match {
+  case """\N""" => -1
+  case _ => 
+  try {
+    var str = do_DateSimpleDistill(strline)
+	if (str.length > 11) 
+	  str
+	else if (str.length == 10) {
+	  var str2Date = dateFormatCommon.parse(str)
+	  dateFormatDeaRel.format(str2Date)
+	}
+	else 
+	  -2
+	}    
+}
+
+//示例：
+do_DateSimpleTrans("2012-12-15 23:22:45")  do_DateSimpleTrans("2012-12-15")  do_DateSimpleTrans("2012-2-15 3:22:45")
+singleFieldResult.map(a => do_excluMaoHao(a(14))).map(do_DateSimpleTrans).distinct
+singleFieldResult.map(a => do_excluMaoHao(a(29))).map(do_DateSimpleTrans).distinct
+
+//处理FULLTIME字段，对应a(30)
+/** 只有a14和a29所对应值，均为时间格式，且前者值大于后者，才会进行a14 - a29的处理，否则处理为-2
+ * @function do_DateSimpleDistill_FullTime：@param dealine > @param relline
+ */
+singleFieldResult.map(a => do_excluMaoHao(a(30))).distinct
+val a14 = singleFieldResult.map(a => do_excluMaoHao(a(14))).map(do_DateSimpleTrans).map(_.toString)
+val a29 = singleFieldResult.map(a => do_excluMaoHao(a(29))).map(do_DateSimpleTrans).map(_.toString)
+
+def do_DateSimpleDistill_FullTime(dealine: String, relline: String) = {
+  if (dealine.length > 10 && relline.length > 10 && dealine > relline) {
+    var deaStr = dateFormatDeaRel.parse(dealine)
+    var relStr = dateFormatDeaRel.parse(relline)
+    (deaStr.getTime()-relStr.getTime())/(60*60*1000)
+  } 
+  else 
+    -2
+}
+
+//示例：
+do_DateSimpleDistill_FullTime("2012-12-15 23:22:45", "2012-12-10 23:22:45")
+do_DateSimpleDistill_FullTime("2012-12-15 23:22:45", "2012-12-16 23:22:45")
+val a30 = a14.zip(a29).map(a => do_DateSimpleDistill_FullTime(a._1.toString, a._2.toString))
+a14.zip(a29).map(a => do_DateSimpleDistill_FullTime(a._1.toString, a._2.toString)).distinct
+
+/**
+ * 处理CREATE_TIME、INTERESTTIME字段，对应a(28)、a(31)
+ * @function do_DateSimpleTrans：目前只需简单的时间处理即可
+ */
+singleFieldResult.map(a => do_excluMaoHao(a(28))).distinct 
+singleFieldResult.map(a => do_excluMaoHao(a(31))).distinct
+singleFieldResult.map(a => do_excluMaoHao(a(28))).map(do_DateSimpleTrans)
+singleFieldResult.map(a => do_excluMaoHao(a(31))).map(do_DateSimpleTrans)
+
+
+先查看下字段REPAYTYPE的状态
+singleFieldResult.map(a => do_excluMaoHao(a(15))).distinct
+// 字段REPAYTYPE的处理规则：
+1、形如“还款方式：（有空格，有换行）到期还本，按月付息”，或“还款方式：（有空格，有换行）按月还息到期还本”或“按月付息到期还本”或包含“每月还息到期还本”的情况，处理为0；
+2、形如“还款方式:(空格，换行)到期全额还款”或“到期还本付息”或“到期还本还息”或“一次性还款”处理为1；
+3、包含“等额本息”，或“按月分期赎回”或包含“按季分期”的处理为2；
+4、包含“按日计息”的处理为3；
+5、包含“固定日”的处理为3；
+5、空值处理为-1；
+6、其他处理为-2；
+
+
+
+/**
+ * 处理REPAYTYPE字段，对应a(15)
+ * @function do_contentSimpleCheck_RepayType 只是对为数字的字符串做简单的检查处理，是不完全的。
+ */
+
+def do_contentSimpleCheck_RepayType(strline: String) = strline match {
+  case """\N""" => -1
+  case _ => {
+    if (strline.contains("日") && strline.contains("息")) 
+	  3
+	else if (strline.contains("分期") && strline.contains("月"))
+	  2
+	else if (strline.contains("等额本息") || (strline.contains("分期") && strline.contains("季")))
+	  2
+	else if (strline.contains("到期") && (strline.contains("还本付息") || strline.contains("还本还息") || strline.contains("全额还款")))
+	  1
+	else if (strline.contains("一次性") && (strline.contains("还本付息") || strline.contains("还款")))
+	  1
+	else if (strline.contains("按月还息") || strline.contains("每月还息"))
+	  0
+	else if (strline.contains("到期还本") && strline.contains("月付息"))
+	  0
+	else 
+	  -2
+   }
+} 
+
+//示例："按日计息".contains("日") && "按日计息".contains("息")
+do_contentSimpleCheck_RepayType("按日计息")      do_contentSimpleCheck_RepayType("到期全额还款")
+do_contentSimpleCheck_RepayType("按月分期赎回")  do_contentSimpleCheck_RepayType("按月还息")
+singleFieldResult.map(a => do_excluMaoHao(a(15))).map(do_contentSimpleCheck_RepayType).distinct
+
+
+/** 处理BORROWER_NAME字段，对应a(16) 
+ * @function do_simpleFieldTrans：只用于目前认为简单字段的处理
+ */ 
+singleFieldResult.map(a => do_excluMaoHao(a(16))).map(do_simpleFieldTrans).distinct
+
+
+/** 处理BORROWER_SEX字段，对应a(17) 
+ * @function do_contentSimpleCheck_BorrSex
+ */ 
+处理规则：
+1、包含‘男’处理为1；包含‘女’处理为0；
+2、空值为-1；
+3、其他均为异常，处理为-2；
+
+def do_contentSimpleCheck_BorrSex(strline: String) = strline match {
+  case """\N""" => -1
+  case _ => {
+    if (strline.contains("男")) 
+	  1
+	else if (strline.contains("女"))
+	  0
+	else 
+	  -2
+	}
+}
+
+//示例：
+singleFieldResult.map(a => do_excluMaoHao(a(17))).map(do_contentSimpleCheck_BorrSex).distinct
+
+
+/** 处理BORROWER_AGE字段，对应a(18)
+ * @function do_NumberSimpleDistill_BorrAge
+ */ 
+处理规则：
+1、包含“**岁”，取‘岁’前面的值；
+2、本身为数值，如果数值不超过100，则取本身数据即可；
+3、形如“出生年月：1988-01”，处理为‘2015-1988’的值；
+4、形如“19650903”，取前四位1965，处理为‘2015-1965’的值；
+5、形如“1978/8/12”，取第‘/’前面的数据，处理为‘2015-1978’的值；
+6、空值处理为-1；
+7、其他异常处理为-2；
+
+def do_NumberSimpleDistill_BorrAge(strline: String) = strline match {
+  case """\N""" => -1
+  case _ => {
+    var istrue = strline.matches("^[-+]?(([0-9]+)([.]([0-9]+))?|([.]([0-9]+))?)$")
+    if (strline.contains("岁") && !(strline.contains("-"))) 
+	  do_NumberSimpleDistill(strline).toInt
+	else if (strline.contains("出生年月") || strline.contains("/")) {
+	  var str = do_NumberSimpleDistill(strline)
+	  if (str.length > 4)
+	    2015 - (str.slice(0, 4).toInt)
+	  else -2
+	  }
+	else if (istrue && strline.length > 0) {
+	  if (strline.length > 3)
+	    2015 - strline.slice(0, 4).toInt
+	  else if(strline.toInt < 100)
+	    strline.toInt
+	  else -2
+	  }
+	else 
+	  -2
+	}
+}
+
+//示例：
+do_NumberSimpleDistill_BorrAge("45岁")  do_NumberSimpleDistill_BorrAge("45-50岁")  do_NumberSimpleDistill_BorrAge("50")  
+do_NumberSimpleDistill_BorrAge("出生年月：1965-07")  do_NumberSimpleDistill_BorrAge("19650903")
+do_NumberSimpleDistill_BorrAge("1965")   do_NumberSimpleDistill_BorrAge("1978/8/12")  do_NumberSimpleDistill_BorrAge("10ab") 
+
+singleFieldResult.map(a => do_excluMaoHao(a(18))).map(do_NumberSimpleDistill_BorrAge).distinct
+
+
+/** 处理BORROWER_EDUCATION字段，对应a(19)
+ * @function do_contentSimpleCheck_BorrEdu
+ */ 
+处理规则：
+1、包含“初中”处理为1； 
+2、包含“高中”“中专”处理为2；
+3、包含“本科”“大专”“专科”的处理为3； 
+4、包含“硕士”“博士”“留学”处理为4；
+5、空值处理为-1；    
+6、其他异常处理为-2；
+
+def do_contentSimpleCheck_BorrEdu(strline: String) = strline match {
+  case """\N""" => -1
+  case _ => {
+    if (strline.contains("初中") ) 
+	  1
+	else if (strline.contains("高中") || strline.contains("中专"))
+      2	
+	else if (strline.contains("本科") || strline.contains("大专") || strline.contains("专科"))
+      3
+    else if (strline.contains("硕士") || strline.contains("博士") || strline.contains("留学"))
+      4 
+	else 
+	  -2
+	}
+}
+
+//示例：
+singleFieldResult.map(a => do_excluMaoHao(a(19))).distinct
+singleFieldResult.map(a => do_excluMaoHao(a(19))).map(do_contentSimpleCheck_BorrEdu).distinct
+
+
+/** 处理BORROWER_MARRIAGE字段，对应a(20)
+ * @function do_contentSimpleCheck_BorrMarrige
+ */ 
+处理规则：
+1、包含“已婚”处理为1；
+2、包含“未婚”处理为2；
+3、包含“丧偶”处理为3；
+4、包含“离异”处理为4；
+5、空值处理为-1；
+6、其他异常值处理为-2
+
+def do_contentSimpleCheck_BorrMarrige(strline: String) = strline match {
+  case """\N""" => -1
+  case _ => {
+    if (strline.contains("已婚") ) 
+	  1
+	else if (strline.contains("未婚"))
+      2	
+	else if (strline.contains("丧偶"))
+      3
+    else if (strline.contains("离异"))
+      4 
+	else 
+	  -2
+	}
+}
+
+//示例：
+singleFieldResult.map(a => do_excluMaoHao(a(20))).distinct
+singleFieldResult.map(a => do_excluMaoHao(a(20))).map(do_contentSimpleCheck_BorrMarrige).distinct
+
+
+/**处理BORROWER_INDUSTRY字段，对应a(21)
+ * 声明：该段代码来自于zl(张莉)，我只做了小小的改动
+ * @function do_contentSimpleCheck_BorrIndustry
+ */ 
+处理规则：
+1:建筑
+2:零售 或 批发
+3:农业 ,农林牧渔
+4:住宿,餐饮
+5:能源 , 电力 , 热力 , 燃气 ,水
+6:金融  ,保险
+7:制造业
+8:交通运输 , 仓储 , 邮政
+9:教育
+10:卫生  , 医疗 ,社保 ,
+11:文体娱
+12:信息 , 计算机 , 软件
+13:社会服务 ,居民服务 ,服务
+14:环境 公共设施管理
+15:房地产
+16:其他
+
+def do_contentSimpleCheck_BorrIndustry(strline: String) = strline match {
+  case """\N""" => -1
+  case _ => {
+    if(strline.contains("建筑"))
+      1
+    else if(strline.contains("零售") || strline.contains("批发"))
+      2
+    else if(strline.contains("农") || strline.contains("牧") || strline.contains("林") || strline.contains("渔"))
+      3
+    else if(strline.contains("住宿") || strline.contains("餐饮"))
+      4
+    else if(strline.contains("能源") || strline.contains("电力") || strline.contains("热力") || strline.contains("燃气") || strline.contains("水"))
+      5
+    else if(strline.contains("金融") || strline.contains("保险"))
+      6
+    else if(strline.contains("制造业"))
+      7
+    else if(strline.contains("交通运输") || strline.contains("仓储") || strline.contains("邮政") || strline.contains("运输"))
+      8
+    else if(strline.contains("教育"))
+      9
+    else if(strline.contains("卫生") || strline.contains("医疗") || strline.contains("社保"))
+      10
+    else if(strline.contains("文") || strline.contains("体") || strline.contains("娱"))
+      11
+    else if(strline.contains("信息") || strline.contains("计算机") || strline.contains("软件"))
+      12
+    else if(strline.contains("服务"))
+      13
+    else if(strline.contains("环境") || strline.contains("公共设施"))
+      14
+    else if(strline.contains("房地产"))
+      15
+    else
+      -2
+	}
+}
+
+//示例：
+singleFieldResult.map(a => do_excluMaoHao(a(21))).distinct
+singleFieldResult.map(a => do_excluMaoHao(a(21))).map(do_contentSimpleCheck_BorrIndustry).distinct
+
+
+/**处理BORROWER_CITY,BORROWER_INCOME,BORROWER_HOUSE,BORROWER_CAR、CUR_URL字段，对应a(22)、a(23)、a(24)、a(25)、a(27)
+ * 声明：这些字段，暂时不做处理。如果需要，只需根据要求写出相应的处理函数即可
+ */ 
+
+
+
+/**处理REWARD字段，对应a(26)
+ * @function do_NumberSimpleDistill_Reward
+ */
+处理规则：
+1、形如“1.80%”取‘%’前的数字即可；
+2、数值如果小于50直接保存即可；
+3、形如“投资奖励：（空格）7%奖励”，取‘%’前的数值即可；
+4、包含“按比例”处理为0；
+5、空值处理为-1；
+6、其他异常处理为-2；
+
+def do_NumberSimpleDistill_Reward(strline: String) = strline match {
+  case """\N""" => -1
+  case _ => {
+    var istrue = strline.matches("^[-+]?(([0-9]+)([.]([0-9]+))?|([.]([0-9]+))?)$")
+    if (strline.contains("按比例")) 
+	  0
+	else if (strline.contains("%")) {
+	  var str = do_NumberSimpleDistill(strline)
+	  if (str.length > 0)
+	    str.toFloat
+	  else -2
+	  }
+	else if (istrue && strline.length > 0) {
+	  if (strline.toFloat < 50)
+	    strline.toFloat
+	  else -2
+	  }
+	else 
+	  -2
+	}
+}
+
+//示例：
+do_NumberSimpleDistill_Reward("7.0%")   do_NumberSimpleDistill_Reward("7.5")  do_NumberSimpleDistill_Reward("30")
+do_NumberSimpleDistill_Reward("70")   do_NumberSimpleDistill_Reward("按比例0.7%")
+singleFieldResult.map(a => do_excluMaoHao(a(26))).distinct
+singleFieldResult.map(a => do_excluMaoHao(a(26))).map(do_NumberSimpleDistill_Reward).distinct
+
+  
+//最终每个字段的结果
+val a0 = singleFieldResult.map(a => do_excluMaoHao(a(0)))
+val a1 = singleFieldResult.map(a => do_excluMaoHao(a(1))).map(do_dateSimpleDistill_Repay)
+val a2 = singleFieldResult.map(a => do_excluMaoHao(a(2))).map(do_simpleFieldTrans)
+val a3 = singleFieldResult.map(a => do_excluMaoHao(a(3))).map(do_simpleFieldTrans)
+val a4 = singleFieldResult.map(a => do_excluMaoHao(a(4))).map(do_simpleFieldTrans)
+val a5 = singleFieldResult.map(a => do_excluMaoHao(a(5))).map(do_NumberSimpleCheck_ItemAmt)
+val a6 = singleFieldResult.map(a => do_excluMaoHao(a(6))).map(do_contentSimpleCheck_ItemStatus)
+val a7 = singleFieldResult.map(a => do_excluMaoHao(a(7))).map(do_simpleFieldTrans)
+val a8 = singleFieldResult.map(a => do_excluMaoHao(a(8))).map(do_NumberSimpleDistill_InvestPro)
+val a9 = singleFieldResult.map(a => do_excluMaoHao(a(9))).map(do_NumberSimpleDistill_LifeLoan)
+val a10 = singleFieldResult.map(a => do_excluMaoHao(a(10))).map(do_NumberSimpleDistill_MoneyRate)
+val a11 = singleFieldResult.map(a => do_excluMaoHao(a(11))).map(do_contentSimpleCheck_LoanType)
+val a12 = singleFieldResult.map(a => do_excluMaoHao(a(12))).map(do_simpleFieldTrans)
+val a13 = singleFieldResult.map(a => do_excluMaoHao(a(13))).map(do_simpleFieldTrans)
+val a14 = singleFieldResult.map(a => do_excluMaoHao(a(14))).map(do_DateSimpleTrans)
+val a15 = singleFieldResult.map(a => do_excluMaoHao(a(15))).map(do_contentSimpleCheck_RepayType)
+val a16 = singleFieldResult.map(a => do_excluMaoHao(a(16))).map(do_simpleFieldTrans)
+val a17 = singleFieldResult.map(a => do_excluMaoHao(a(17))).map(do_contentSimpleCheck_BorrSex)
+val a18 = singleFieldResult.map(a => do_excluMaoHao(a(18))).map(do_NumberSimpleDistill_BorrAge)
+val a19 = singleFieldResult.map(a => do_excluMaoHao(a(19))).map(do_contentSimpleCheck_BorrEdu)
+val a20 = singleFieldResult.map(a => do_excluMaoHao(a(20))).map(do_contentSimpleCheck_BorrMarrige)
+val a21 = singleFieldResult.map(a => do_excluMaoHao(a(21))).map(do_contentSimpleCheck_BorrIndustry)
+val a22 = singleFieldResult.map(a => do_excluMaoHao(a(22))).map(do_simpleFieldTrans)
+val a23 = singleFieldResult.map(a => do_excluMaoHao(a(23))).map(do_simpleFieldTrans)
+val a24 = singleFieldResult.map(a => do_excluMaoHao(a(24))).map(do_simpleFieldTrans)
+val a25 = singleFieldResult.map(a => do_excluMaoHao(a(25))).map(do_simpleFieldTrans)
+val a26 = singleFieldResult.map(a => do_excluMaoHao(a(26))).map(do_NumberSimpleDistill_Reward)
+val a27 = singleFieldResult.map(a => do_excluMaoHao(a(27))).map(do_simpleFieldTrans)
+val a28 = singleFieldResult.map(a => do_excluMaoHao(a(28))).map(do_DateSimpleTrans)
+val a29 = singleFieldResult.map(a => do_excluMaoHao(a(29))).map(do_DateSimpleTrans)
+val a30 = a14.zip(a29).map(a => do_DateSimpleDistill_FullTime(a._1.toString, a._2.toString))
+val a31 = singleFieldResult.map(a => do_excluMaoHao(a(31))).map(do_DateSimpleTrans)
+
+val inResult = for (i <- 0 until singleFieldResult.length) 
+yield List(a0(i),a1(i),a2(i),a3(i),a4(i),a5(i),a6(i),a7(i),a8(i),a9(i),a10(i), a11(i),a12(i),a13(i),a14(i),a15(i),a16(i),a17(i),a18(i),a19(i),a20(i),a21(i),a22(i),a23(i),a24(i),a25(i),a26(i),a27(i),a28(i),a29(i),a30(i),a31(i))
+
+//将生成的数据inResult写入文件中，并tab键间隔
+import java.io.PrintWriter
+val outResult = new PrintWriter("/tmp/out000.txt")
+for (i <- inResult.map(a => a.mkString(","))) outResult.println(i)
+outResult.close()
+ 
+ 
+
+
+
+
+
+
