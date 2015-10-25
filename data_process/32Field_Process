@@ -1,12 +1,27 @@
+/**
+ * 功能声明：这部分程序用来处理每行的32个字段的值
+ * 由于数据格式比较复杂，主要出现了3种情况：
+ * 1：一行数据变为多行；2：对一行数据进行分割时，出现超过32个字段的现象；3：某些字段的判断逻辑较为复杂
+ * 所以，下面的程序主要解决这三个部分
+ **
+ * 数据说明：数据源为txt文件，输出的数据也暂定为txt文件，本程序不涉及数据库读取和写入的操作，数据源的第一行为各个字段名，之后全为相应的值
+ * 环境说明：目前暂定为spark-shell里面执行，可以快速进行数据处理及相应的数据验证，没问题的话以后可以进行封装
+ * 操作说明：变量wwwIndex的值，需要按照数据源中的顺序，来指定；//：表示可以不用执行该代码，或者解释说明
+ * 字段说明：
+ * 1：字段SITE_URL必须保证都有值，不能包含空值，否则不能使多行变为一行，所以程序默认wwwIndex的值，在原始数据库中每行都有值
+ * 2：字段BORROWER_INDUSTRY的处理，代码来自于zl(张莉)，我只做了小小的改动，十分感谢
+ * 3：暂时未处理个字段：共有13个字段，有需要保持不变的，有暂时不要处理的，分别是：
+ * id,SITE_NAME,SITE_URL,ITEM_NAME,ITEM_INTRODUCTION,LOAN_USE,BONDING_COMPANY,BORROWER_NAME,BORROWER_CITY,BORROWER_INCOME,BORROWER_HOUSE,BORROWER_CAR,CUR_URL
+ */
 
-
-
-//val rawData = sc.textFile("hdfs:///user/test/input/1000.txt")
+//进入到spark-shell环境，并加载数据
 val rawData = sc.textFile("hdfs:///user/test/input/4500.txt")
 val testData = rawData.toArray
 
+//注意：要和数据源中的顺序一致
 val wwwIndex = List(""","http://www.iwdai.com",""",""","http://www.apengdai.com",""",""","https://www.twotiger.com",""")
 
+//多行变为一行
 val trueIndex = wwwIndex.map(ind => testData.map(_ contains ind).zipWithIndex.filter{ case(a, b) => a })
 val beginTrueIndex = trueIndex.map(x => x(0)).map(a => a._2)
 val endTrueIndex = beginTrueIndex.slice(1,beginTrueIndex.length) :+ testData.length
@@ -18,9 +33,10 @@ endTrueIndex.zip(trueIndex).flatMap{ a =>
   endWBound.map(x => testData.slice(x._1, x._2).mkString(""))
   }
 
+
 //var test = singleLineResult.slice(4335, 4336).map(x => x.split(",")).flatten 
 //test.map(_ replaceAll("""\\N""", """"NA"""")).map(a => a startsWith """"""").zipWithIndex
-  
+//每行的字段统一为32个字段  
 val singleFieldResult = 
 singleLineResult.map{ strLine => 
   var singleLine = strLine.split(",")
@@ -33,8 +49,8 @@ singleLineResult.map{ strLine =>
 
 //下面是简单的验证
 singleFieldResult.map(a => a.length).filter(b => b == 32).length
-singleFieldResult.map(a => a(31).replaceAll(" ", "")).distinct
-singleFieldResult.map(a => a(31).replaceAll(" ", "")).distinct.length
+//singleFieldResult.map(a => a(31).replaceAll(" ", "")).distinct
+//singleFieldResult.map(a => a(31).replaceAll(" ", "")).distinct.length
 
 /**
  * 共有32个字段，其中id不需要处理
@@ -345,11 +361,11 @@ singleFieldResult.map(a => do_excluMaoHao(a(11))).distinct
 8、空值处理为-1；
 9、其他均为异常，处理为-2；
 
-
  /**
  * 处理LOAN_TYPE字段，对应a(11)
  * @function do_contentSimpleCheck_LoanType 只是对为数字的字符串做简单的检查处理，是不完全的。
  */
+
 
 def do_contentSimpleCheck_LoanType(strline: String) = strline match {
   case """\N""" => -1
@@ -403,9 +419,9 @@ import java.util.Date
 val dateFormatDeaRel = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
 val dateFormatCommon = new SimpleDateFormat("yyyy-MM-dd")
 
-val str="2012-12-15 23:22:45"
-val dt=dateFormatDeaRel.parse(str)
-val reStr = dateFormatCommon.format(dt)    //将时间格式转换为指定的字符串格式，本例即从"yyyy-MM-dd HH:mm:ss" => "yyyy-MM-dd"
+//val str="2012-12-15 23:22:45"
+//val dt=dateFormatDeaRel.parse(str)
+//val reStr = dateFormatCommon.format(dt)    //将时间格式转换为指定的字符串格式，本例即从"yyyy-MM-dd HH:mm:ss" => "yyyy-MM-dd"
 
 def do_DateSimpleTrans(strline: String) = strline match {
   case """\N""" => -1
@@ -472,7 +488,6 @@ singleFieldResult.map(a => do_excluMaoHao(a(15))).distinct
 5、包含“固定日”的处理为3；
 5、空值处理为-1；
 6、其他处理为-2；
-
 
 
 /**
