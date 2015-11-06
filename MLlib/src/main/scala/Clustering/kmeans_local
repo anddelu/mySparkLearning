@@ -1,0 +1,66 @@
+/**KMeans： local 模式 
+ * 参考spark官方的kmeans local，自己做了部分的修改，权当练练手 ：）
+ * ps：真有点要了老命啊
+ */
+import java.util.Random
+import breeze.linalg.{Vector, DenseVector, squaredDistance}
+import scala.collection.mutable.HashMap
+//import scala.collection.mutable.HashSet
+
+val N = 10000
+val R = 1000
+   val D = 10
+   val K = 10
+   val convergeDist = 0.001
+   val rand = new Random(23)	 
+
+def generateData: Array[DenseVector[Double]] = {
+  def generatePoint(i: Int): DenseVector[Double] = {
+    DenseVector.fill(D) {rand.nextDouble * R}
+}
+Array.tabulate(N)(generatePoint)
+}
+
+def closestPoint(p: Vector[Double], centers: HashMap[Int, Vector[Double]]): Int = {
+  var bestIndex = 0
+  var closest = Double.PositiveInfinity
+  
+  for (i <- 1 to centers.size) {
+    var tempDist = squaredDistance(p, centers.get(i).get)
+ if (tempDist < closest) {
+   closest = tempDist
+   bestIndex = i
+ }
+  }
+  bestIndex
+}
+
+val data = generateData
+   var kPoints = new HashMap[Int, Vector[Double]]	 
+   var tempDist = 1.0
+var i = 0 
+
+for (i <- 1 to K) {
+  kPoints.put(i, data(rand.nextInt(N)))
+}
+
+while (tempDist > convergeDist) {
+  var result = data.map( p => (closestPoint(p, kPoints), (p, 1)))
+  var resultGroupBy = result.groupBy[Int](_._1)
+  var newkPoints = resultGroupBy.map { p =>
+  var stats = p._2.reduceLeft[(Int, (Vector[Double], Int))] {
+    case ((id1, (p1, c1)), (id2, (p2, c2))) => (id1, (p1+p2, c1+c2))
+    }
+    (stats._1, stats._2._1 * (1.0 / stats._2._2))
+  }
+    
+  tempDist = 0.0
+  for (mapping <- newkPoints) {
+    tempDist += squaredDistance(kPoints(mapping._1), mapping._2)
+    kPoints.put(mapping._1, mapping._2)
+  }
+  i += 1
+  }
+	 
+println("Final centers: " + kPoints)
+println("Iteration times: " + i)
