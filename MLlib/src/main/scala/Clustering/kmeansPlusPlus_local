@@ -1,0 +1,103 @@
+/**KMeans++： local plusplus模式 
+ * 参考spark官方的kmeans local 和 kmeansplusplus，自己做了部分的修改，权当练练手 ：）
+ * 参考了网上的kmeansplusplus的资料，算法的介绍以及python代码的实现
+ * ps：相比于之前的kmeans local模式，主要增加了函数kMeansPlusPlus(初始中心点的选择)，修改下函数closetPoint的返回值
+ */
+import java.util.Random
+import breeze.linalg.{Vector, DenseVector, squaredDistance}
+import scala.collection.mutable.HashMap
+//import scala.collection.mutable.HashSet
+
+val N = 10000
+val R = 1000
+val D = 10
+val K = 10
+val convergeDist = 0.001
+val rand = new Random(23)	 
+
+/**产生数据集*/
+def generateData: Array[DenseVector[Double]] = {
+  def generatePoint(i: Int): DenseVector[Double] = {
+    DenseVector.fill(D) {rand.nextDouble * R}
+}
+Array.tabulate(N)(generatePoint)
+}
+
+/**计算每个点所属的最近的cluster中心点及距离*/
+def closetPoint(p: Vector[Double], centers: HashMap[Int, Vector[Double]]): (Int, Double) = {
+  var index = 0
+  var bestIndex = 0
+  var closest = Double.PositiveInfinity
+
+  for (i <- 1 to centers.size) {
+    val vCurr = centers.get(i).get
+    val tempDist = squaredDistance(p, vCurr)
+    if (tempDist < closest) {
+      closest = tempDist
+      bestIndex = i
+    }
+  }
+  (bestIndex, closest)
+}
+
+/**对初始的中心点进行选择*/
+def kMeansPlusPlus(data: Array[DenseVector[Double]], k: Int): HashMap[Int, Vector[Double]] = {
+  var centers = new HashMap[Int, Vector[Double]]
+  centers(1) = data(rand.nextInt(N))
+  var distance: Array[Double] = Array.fill(data.length)(0.0) //用来存储每个点距离最近的中心点的距离
+  for (i <- 1 until k) {
+    var sum = 0.0
+    for (j <- 0 until data.length) {
+      distance(j) = closetPoint(data(j), centers)._2
+      sum += distance(j)
+    }
+    sum *= rand.nextDouble()
+    var j = 0
+    var cumulativeScore = 0.0
+    while (j < distance.size && cumulativeScore < sum) {
+      cumulativeScore += distance(j)
+      j += 1
+    }
+    /**由于在刚才的while循环中，j是后加1的，例如当j=8时，cumulativieScore加上distance(8)开始第一个不满足条件了，
+     *这时j还要加1变为9，所以我们要取j=9-1
+     */
+    if (j == 0) {
+      println(s"Using duplicate point for center k = $i")
+      centers(i+1) = data(0)
+      } else {
+      centers(i+1) = data(j-1)  
+      }
+  }
+  centers
+ }
+
+
+val data = generateData
+var kPoints = new HashMap[Int, Vector[Double]]	 
+var tempDist = 1.0
+var i = 0 
+kPoints = = kMeansPlusPlus(data, K)
+println("Initial centers: " + kPoints.foreach(println))
+
+/**选定好初始点后进行普通的kmeans迭代，从而求出可行的centers*/
+while (tempDist > convergeDist) {
+  var result = data.map( p => (closestPoint(p, kPoints)._1, (p, 1)))
+  var resultGroupBy = result.groupBy[Int](_._1)
+  var newkPoints = resultGroupBy.map { p =>
+  var stats = p._2.reduceLeft[(Int, (Vector[Double], Int))] {
+    case ((id1, (p1, c1)), (id2, (p2, c2))) => (id1, (p1+p2, c1+c2))
+    }
+    (stats._1, stats._2._1 * (1.0 / stats._2._2))
+  }
+    
+  tempDist = 0.0
+  for (mapping <- newkPoints) {
+    tempDist += squaredDistance(kPoints(mapping._1), mapping._2)
+    kPoints.put(mapping._1, mapping._2)
+  }
+  i += 1
+  }
+	 
+println("Final centers: " + kPoints)
+println("Iteration times: " + i)
+
