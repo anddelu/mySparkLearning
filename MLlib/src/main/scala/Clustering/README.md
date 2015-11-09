@@ -1,4 +1,5 @@
-创建kmeans++，算法可参考如下：文章链接：http://coolshell.cn/articles/7779.html 和 https://en.wikipedia.org/wiki/K-means%2B%2B
+创建kmeans++，算法可参考如下：文章链接：http://coolshell.cn/articles/7779.html 和 https://en.wikipedia.org/wiki/K-means%2B%2B  
+
 我在这里重点说一下 K-Means++算法步骤：
 1：先从我们的数据库随机挑个随机点当“种子点”。
 2：对于每个点，我们都计算其和最近的一个“种子点”的距离D(x)并保存在一个数组里，然后把这些距离加起来得到Sum(D(x))。
