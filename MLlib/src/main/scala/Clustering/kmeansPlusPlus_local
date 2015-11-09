@@ -1,7 +1,7 @@
 /**KMeans++： local plusplus模式 
  * 参考spark官方的kmeans local 和 kmeansplusplus，自己做了部分的修改，权当练练手 ：）
  * 参考了网上的kmeansplusplus的资料，算法的介绍以及python代码的实现
- * ps：相比于之前的kmeans local模式，主要增加了函数kMeansPlusPlus(初始中心点的选择)，修改下函数closetPoint的返回值
+ * ps：相比于之前的kmeans local模式，主要增加了函数kMeansPlusPlus(初始中心点的选择)，修改下函数closestPoint的返回值
  */
 import java.util.Random
 import breeze.linalg.{Vector, DenseVector, squaredDistance}
@@ -24,7 +24,7 @@ Array.tabulate(N)(generatePoint)
 }
 
 /**计算每个点所属的最近的cluster中心点及距离*/
-def closetPoint(p: Vector[Double], centers: HashMap[Int, Vector[Double]]): (Int, Double) = {
+def closestPoint(p: Vector[Double], centers: HashMap[Int, Vector[Double]]): (Int, Double) = {
   var index = 0
   var bestIndex = 0
   var closest = Double.PositiveInfinity
@@ -48,7 +48,7 @@ def kMeansPlusPlus(data: Array[DenseVector[Double]], k: Int): HashMap[Int, Vecto
   for (i <- 1 until k) {
     var sum = 0.0
     for (j <- 0 until data.length) {
-      distance(j) = closetPoint(data(j), centers)._2
+      distance(j) = closestPoint(data(j), centers)._2
       sum += distance(j)
     }
     sum *= rand.nextDouble()
