@@ -76,7 +76,7 @@ val data = generateData
 var kPoints = new HashMap[Int, Vector[Double]]	 
 var tempDist = 1.0
 var i = 0 
-kPoints = = kMeansPlusPlus(data, K)
+kPoints = kMeansPlusPlus(data, K)
 println("Initial centers: " + kPoints.foreach(println))
 
 /**选定好初始点后进行普通的kmeans迭代，从而求出可行的centers*/
