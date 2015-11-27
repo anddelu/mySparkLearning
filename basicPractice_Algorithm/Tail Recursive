@@ -1,0 +1,39 @@
+对于阶乘的递归如下：
+形式如下：5！= 5 * 4 * 3 * 2 * 1
+def factorial(n: Int): Int =  
+  if (n == 1) 1  
+  else n * factorial(n-1)  
+
+对于阶乘的尾递归如下：
+/**函数tailFactorial为普通的函数，fac为真正的尾递归函数*/
+import scala.annotation.tailrec
+def tailFactorial(n: Int): Int = {
+  @tailrec  /**验证fac是否为尾递归*/
+  def fac(a: Int, b: Int): Int = 
+    if (a == 1) b
+    else fac(a-1, a * b)
+  fac(n, 1)
+}
+
+
+对于斐波那契数的递归如下：
+形式如下：1、1、2、3、5 ……
+公式如下：a1 + a2 = a3（a3从第三个元素开始）
+n：表示第n个斐波那契数
+def fabonacci(n: BigInt): BigInt = 
+  if (n <= 2) 1
+  else fabonacci(n-1) + fabonacci(n-2)
+
+对于斐波那契数的尾递归如下：
+/**需要两个累加器，汗，没想到啊*/
+def tailFabonacci(n: BigInt) = {
+  def fabo(a: BigInt, b: BigInt, c: BigInt): BigInt = 
+    if (a <= 2) b + c
+    else fabo(a-1, c, b + c)
+  fabo(n, 0, 1)
+}
+
+参考文档：
+https://www.ibm.com/developerworks/cn/java/j-lo-funinscala1/
+http://meetfp.com/zh/blog/tail-recursion
+
