@@ -1,0 +1,11 @@
+先简单copy一个
+def quickSort(lst: List[Int]): List[Int] = {
+  if (lst.isEmpty) lst
+  else {
+    val p = lst.head
+    val (before, after) = lst.tail.partition(_ < p)
+    quickSort(before) ++ (p :: quickSort(after))
+  }
+  
+}
+quickSort(List(5,3,4,1,6,2))
