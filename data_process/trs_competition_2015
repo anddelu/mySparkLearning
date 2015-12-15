@@ -1,6 +1,6 @@
 /**
  * Created by Administrator on 2015/12/13.
- * 这个一个很啰嗦的版本，而且未较多的体现出来的函数式编程的特色
+ * 变得更啰嗦的版本，没有足够体现出FP的特色，下步做个简化版的吧
  */
 import scala.io.Source
 import scala.collection.mutable.ListBuffer
@@ -100,12 +100,18 @@ object trs_com_dataPorcess01 {
     //val it2 = src2.iterator
     //println(it2.next)
 
+    //定义函数：用-1取代0
     def replaceZeroByMinus(dou: Any): String= dou match {
       case 0 => -1.toString
       case _ => dou.toString
     }
 
     println(replaceZeroByMinus(-1))
+
+    //定义函数：对double保留2位
+    def take2Dou(dou: Double): Double = {
+      BigDecimal(dou).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
+    }
 
     //对数据进行简单的统计
     def data_process_simpleStats(file: File) = {
@@ -193,20 +199,37 @@ object trs_com_dataPorcess01 {
 
         val linesCount = listbu1.length
         val temp18len = temp18.length
+        /*
         val resul13 = BigDecimal(cha13 * 1.0 / linesCount).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
         val resul14 = BigDecimal(cha14 * 1.0 / linesCount).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
         val resul15 = BigDecimal(cha15 * 1.0 / linesCount).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
         val sum345 = resul13 + resul14 + resul15
         val resul16 = BigDecimal(cha16 * 1.0 / linesCount).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
         val resul17 = BigDecimal(cha17 * 1.0 / linesCount).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
+        */
+        val resul13 = take2Dou(cha13 * 1.0 / linesCount)
+        val resul14 = take2Dou(cha14 * 1.0 / linesCount)
+        val resul15 = take2Dou(cha15 * 1.0 / linesCount)
+        val sum345 = resul13 + resul14 + resul15
+        val resul16 = take2Dou(cha16 * 1.0 / linesCount)
+        val resul17 = take2Dou(cha17 * 1.0 / linesCount)
         val sum67 = resul16 + resul17
         if (temp18len > 0) {
+          /*
           val resul18 = BigDecimal(cha18 * 1.0 / temp18len).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
           val resul19 = BigDecimal(cha19 * 1.0 / temp18len).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
           val resul20 = BigDecimal(cha20 * 1.0 / temp18len).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
           val resul21 = BigDecimal(cha21 * 1.0 / temp18len).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
           val resul22 = BigDecimal(cha22 * 1.0 / temp18len).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
           val resul23 = BigDecimal(cha23 * 1.0 / temp18len).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
+          val sum823 = resul19 + resul20 + resul21 + resul22 + resul23
+          */
+          val resul18 = take2Dou(cha18 * 1.0 / temp18len)
+          val resul19 = take2Dou(cha19 * 1.0 / temp18len)
+          val resul20 = take2Dou(cha20 * 1.0 / temp18len)
+          val resul21 = take2Dou(cha21 * 1.0 / temp18len)
+          val resul22 = take2Dou(cha22 * 1.0 / temp18len)
+          val resul23 = take2Dou(cha23 * 1.0 / temp18len)
           val sum823 = resul19 + resul20 + resul21 + resul22 + resul23
           List(file.getName, resul13, resul14, resul15, resul16, resul17, resul18, resul19, resul20, resul21, resul22, resul23, sum345, sum67, sum823)
         }
@@ -235,3 +258,4 @@ object trs_com_dataPorcess01 {
 
   }
 }
+
