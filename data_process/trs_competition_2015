@@ -1,5 +1,6 @@
 /**
  * Created by Administrator on 2015/12/13.
+ * 这个一个很啰嗦的版本，而且未较多的体现出来的函数式编程的特色
  */
 import scala.io.Source
 import scala.collection.mutable.ListBuffer
