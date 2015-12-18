@@ -1,0 +1,79 @@
+import java.io.BufferedInputStream
+import java.io.File
+import java.io.FileInputStream
+import com.github.tototoshi.csv._
+
+import scala.collection.mutable.ArrayBuffer
+
+
+object file_encode_simple_detect {
+  def main (args: Array[String]) {
+    val file = new File("d:/全部数据/平台1.csv")
+    val in= new FileInputStream(file)
+    val bin = new BufferedInputStream( new FileInputStream(file))
+    val p = (bin.read() << 8) + bin.read()
+
+    //编码格式匹配，不完全，有一定的误差，有把utf-8的误判为gbk的情况，测试了70个文件，大概有5、6个utf-8被误判为gbk的情况
+    //所以在用的时候，要留意一下，
+    def showCharSet(p: Int):String = p match {
+      case 0xefbb => "UTF-8"
+      case 0xfffe => "Unicode"
+      case 0xfeff => "UTF-16BE"
+      case 0x5c75 => "ANSI|ASCII"
+      case _ => "GBK"
+    }
+
+
+    val charset = showCharSet(p)
+    println(charset)
+
+    //获取文件的编码格式
+    def getCharSet(dir: String, file: String): String = {
+      val fileName = dir + file
+      val newfile = new File(fileName)
+      var charSet = ""
+      if(newfile==null || !newfile.exists()){
+        println("文件不存在："+newfile.getAbsolutePath)
+      }
+      else {
+        val binStr = new BufferedInputStream( new FileInputStream(newfile))
+        val p = (binStr.read() << 8) + binStr.read()
+        charSet = showCharSet(p)
+      }
+      charSet
+    }
+
+    def getCharSetFile(file: File): String = {
+      val newfile = file
+      var charSet = ""
+      if(newfile==null || !newfile.exists()){
+        println("文件不存在："+newfile.getAbsolutePath)
+      }
+      else {
+        val binStr = new BufferedInputStream( new FileInputStream(newfile))
+        val p = (binStr.read() << 8) + binStr.read()
+        charSet = showCharSet(p)
+      }
+      charSet
+    }
+
+    //获取指定目录下的所有文件，包含子目录下的文件
+    def getListOfFiles(dir: String):List[File] = {
+      val direc = new File(dir)
+      if (direc.exists && direc.isDirectory) {
+        val newlistFiles = direc.listFiles
+        newlistFiles.filter(_.isFile).toList ++
+        newlistFiles.filter(_.isDirectory).flatMap(sub => getListOfFiles(sub.toString))
+      }
+      else List[File]()
+    }
+    val allfiles = getListOfFiles("D:\\全部数据").
+                   sortBy(_.toString.length).
+                   map(file => (file.getName,getCharSetFile(file)))
+    //println(allfiles)
+    allfiles.foreach(println)
+
+
+  }
+}
+
