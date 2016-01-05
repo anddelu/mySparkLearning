@@ -129,7 +129,7 @@ def compAxpy(multip: Double, v1: Vector, v2: Vector) = {
     val thisIterStepSize = stepSize / sqrt(iter)
     val brzWeightsOld = conArrToBV(conMVToArray(weightsOld)) //转换为breeze的Vector
     val brzWeightsFinal = (1.0 - thisIterStepSize * regParam) * brzWeightsOld
-    brzAxpy(-thisIterStepSize, conArrToBV(conMVToArray(gradient)), brzWeightsFinal) //依然为breeze的Vector
+    compAxpy(-thisIterStepSize, gradient, conArrToMV(conBVToArray(brzWeightsFinal))) //依然为breeze的Vector
     //val norm = brzNorm(brzWeightsFinal) //默认为norm(x, 2.0)
     val norm = brzNorm(brzWeightsFinal, 2.0)
     (conArrToMV(conBVToArray(brzWeightsFinal)), 0.5 * norm * norm)
@@ -154,14 +154,12 @@ def compAxpy(multip: Double, v1: Vector, v2: Vector) = {
     //println(brzNorm(test03, Double.PositiveInfinity))
     //println(test07== BDV(1,2,3))
     var test05 = new DenseVector(Array(1,2,3))
-
-    val test055 = compAxpy(2, test05, test05)
+    var test005 = new DenseVector(Array(1,2,3))
     var test07 = Array(1.0,2.0,3.0)
     println(test07.toList)
-    brzAxpy(1.0, test005, test005)
+    compAxpy(1.0, test005, test005)
+    brzAxpy(1.0, test07, test07)
     val test06 = computeGrad(test05, 1.0, test05)
-    //if (test055.length > 0)
-    //  test05 = conArrToMV(conBVToArray(test055))
     println(test06)
     println(test005)
     println(s"test07 value: ${test07.toList}")
