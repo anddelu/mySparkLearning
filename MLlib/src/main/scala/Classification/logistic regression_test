@@ -1,0 +1,171 @@
+/**
+ * Created by Administrator on 2015/12/27. talk is cheap, show me the code.
+ */
+import breeze.linalg.{SparseVector => BSV, DenseVector => BDV, Vector => BV, axpy => brzAxpy, norm => brzNorm }
+import org.apache.spark.mllib.optimization.Gradient
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.immutable._
+//import org.apache.spark.mllib.linalg.BLAS.dot //私有的，不能访问
+import org.apache.spark.mllib.linalg.{DenseVector, Vectors, Vector, SparseVector}
+import scala.math._
+import breeze.optimize._
+import breeze.linalg._
+//本代码是用来研究logistic Regression二分类实现的，所以难免简陋。实现过程，基本参考spark官方的实现。
+//首选明确LR的gradient的迭代公式
+//针对y={0,1},而非{-1， 1} 重新推导下LR的公式，并依据此公式进行code，否则依据后者会导致实际计算发生错误。
+// (y^ -y)x + lambda * theta (lambda：引入了正则化项)   其中 y^ = 1 / (1 + exp(-1 * (theta dot x)))
+// theta(k+1) = theta(k) - (sum)alpha * (y^ -y)x
+object wolfe_linesearch {
+  /*
+  def test00 = BDV(1,2,3) + BV(0,3,0)
+  def test01 = BDV.zeros[Double](3)
+  def test02 = Vectors.zeros(3)
+  def test03 = BDV(1,-2)
+
+  def test06 = new SparseVector(3, Array(0,2), Array(10, 20))
+  def test07 = new BDV(Array(1,2,3))
+  */
+
+  //def test05 = test00 + test01
+  /*
+  //直接定义计算spark.mllib.linalg的Vector的内积，不考虑将spark的Vector转换为breeze的Vector后再直接利用breeze的dot
+  def compDot(v1: Vector, v2: Vector): Double = {
+    var i = 0
+    var sum = 0.0
+    while(i < v1.size) {
+      sum += v1(i) + v2(i)
+      i += 1
+    }
+    sum
+  }
+  */
+  //定义内积，最好不要随便改变已习惯的用法
+  def compDot(v1: Vector, v2: Vector): Double = {
+   conArrToBV(conMVToArray(v1)) dot conArrToBV(conMVToArray(v2))
+  }
+
+  /* //对于axpy的操作，会改变传入参数的值，比如本例中的test01作为参数值，传入进去，计算完后，最后发现test01的已经发生了改变
+    val test00 = BDV(1,2,3)
+    val test01 = BDV(0,3,0)
+    //brzAxpy(2, test00, test01)
+    println(test01)
+    def comtest(a: Int, b: BDV[Int], c: BDV[Int]): BDV[Int] = {
+      brzAxpy(a, b, c)
+      c
+    }
+    val test02 = comtest(2, test00, test01)
+    println(test01)
+    println(test02)
+   */
+
+  //定义将mllib的Vector，转变为breeze的Vector，分两步进行：先mllib的Vector转换为数组，再将数组转换为breeze的BDV
+  def conMVToArray(v1: Vector) = v1.toDense.values
+  def conArrToBV(arr1: Array[Double]):BDV[Double] = new BDV(arr1)
+  //def test08 = conArrToBV(conMVToArray(test05))
+
+  //定义将breeze的Vector转换为mllib中的Vector，分两步，先讲breeze的Vector转换为数组，再将数组转变为mllib的Vector
+  def conBVToArray(v1: BV[Double]):Array[Double] = v1.toArray.map(a => a.toDouble)
+  //def conBVToArrayInt(v1: BDV[Int]):Array[Double] = v1.toArray.map(a => a.toDouble)
+  def conArrToMV(arr1: Array[Double]):DenseVector = new DenseVector(arr1)
+  //def test08 = conArrToMV(conBVToArrayInt(test03))
+
+/*
+  //直接定义spark.mllib.linalg的axpy: axpy(a, b, c)即 c += a * b
+  def compAxpy(multip: Double, v1: Vector, v2: Vector) = {
+  val arr1 = conMVToArray(v2)
+  val arr2 = conMVToArray(v1)
+  conArrToBV(arr1) + multip * conArrToBV(arr2)
+}
+  */
+def compAxpy(multip: Double, v1: Vector, v2: Vector) = {
+  brzAxpy(multip, conArrToBV(conMVToArray(v1)), conArrToBV(conMVToArray(v2)))
+  }
+
+   // 计算梯度：只涉及logistic Regression的二分类。
+  // (y^ -y)x + lambda * theta (lambda：引入了正则化项)   其中 y^ = 1 / (1 + exp(-1 * (theta dot x)))
+  // 目前暂定，不返回loss值，因为自己还没有搞懂，看了下spark官方的是实现和自己推导的公式不一致
+  def computeGrad(data: DenseVector, label: Double, weights: DenseVector): Vector = {
+    val cumGrad = Vectors.zeros(weights.size)
+    val margin = -1.0 * compDot(data, weights)
+    val multiplier = (1.0 / (1.0 + exp(margin))) - label
+    compAxpy(multiplier, data, cumGrad)
+    cumGrad
+  }
+
+  //val test06 = computeGrad(test05, 1.0, test05)
+
+  // 更新权重weights
+  // 定义一个简单的updater：设置stepSize的值为stepSize / sqrt(iter)
+  def simpleUpdater(weightsOld: Vector, gradient: Vector, stepSize: Double, iter: Int, regParam: Double):(Vector, Double) = {
+    val thisIterStepSize = stepSize / sqrt(iter)
+    compAxpy(-thisIterStepSize, gradient, weightsOld)
+    (weightsOld, 0.0)
+  }
+
+  //定义L1 updater：这部分基本copy官方的spark
+  // if w > shrinkageVal, then set weight component to w - shrinkageVal
+  // if w < -shrinkageVal, then set weight comp0nent to w + shrinkageVal
+  // if -shrinkageVal < w < shrinkageVal, then set weight component  to 0
+  // the above is equivalent to the form: signum(w) * max(0.0, abs(w) - shrinkageVal)
+  def L1Update(weightsOld: Vector, gradient: Vector, stepSize: Double, iter: Int, regParam: Double): (Vector, Double) = {
+    val thisStepSize = stepSize / sqrt(iter)
+    compAxpy(-thisStepSize, gradient, weightsOld)
+    val shrinkageVal = regParam * thisStepSize
+    var weightsBrz = conArrToBV(conMVToArray(weightsOld))
+    //还是while写吧
+    var i = 0
+    while(i < weightsBrz.size) {
+      val wi = weightsBrz(i)
+      weightsBrz(i) = signum(wi) * math.max(0, abs(wi) - shrinkageVal)
+      i += 1
+    }
+    (conArrToMV(conBVToArray(weightsBrz)), brzNorm(weightsBrz, 1.0) * regParam)
+  }
+
+  //定义L2 updater：这部分同样copy 官方的spark
+  // w^ = w - thisIterStepSize * (gradient + regParam * w)
+  // w^ = (1 - thisIterStepSize * regParam) * w - thisIterStepSize * gradient
+  def SquaredL2Updater(weightsOld: Vector, gradient: Vector, stepSize: Double, iter: Int, regParam: Double): (Vector, Double) = {
+    val thisIterStepSize = stepSize / sqrt(iter)
+    val brzWeightsOld = conArrToBV(conMVToArray(weightsOld)) //转换为breeze的Vector
+    val brzWeightsFinal = (1.0 - thisIterStepSize * regParam) * brzWeightsOld
+    brzAxpy(-thisIterStepSize, conArrToBV(conMVToArray(gradient)), brzWeightsFinal) //依然为breeze的Vector
+    //val norm = brzNorm(brzWeightsFinal) //默认为norm(x, 2.0)
+    val norm = brzNorm(brzWeightsFinal, 2.0)
+    (conArrToMV(conBVToArray(brzWeightsFinal)), 0.5 * norm * norm)
+  }
+
+  //尝试写一个wolfe 的 line search，不再像上面那样简单的指定thisIterStepSize
+  // 关于f'、q'的公式推导不一定正确（未经别人检验）
+  // f(x) = 1 / (1 + exp(-1 * (x dot weights)))    f'(x) = -(exp(weights dot x) * x) / (1 + exp(weights dot x))^2
+  // q(t) = f(x + t * p) = 1 / (1 + exp(-1 * ((x + t * p) dot weights)))
+  // q'(t) = -(exp(weights dot (x + t * p)) * (weights dot p)) / (1 + exp(weights dot x))^2
+  // 1. f(x_k + t * p_k) <= m1 * t * (f'(x_k) dot p_k)，亦即q(t) <= q(0) + m1 * t * q'(0)
+  // 2. (f'(x_k + t * p_k) dot p_k) >= m2 * (f'(x_k) dot p_k)， 亦即q'(t) >= m2 * q'(0)
+  // 先弃了吧，2015-12-31
+  /*
+  def wolfe_linesearch(data: DenseVector, label: Double, weights: DenseVector): Double = {
+    def g(x: BDV[Double]) = 1 / (1 + exp(-1 * (x dot weights)))
+    g(BDV(0.,0.,0.))
+  }
+  */
+
+  def main (args: Array[String]) {
+    //println(brzNorm(test03, Double.PositiveInfinity))
+    //println(test07== BDV(1,2,3))
+    var test05 = new DenseVector(Array(1,2,3))
+
+    val test055 = compAxpy(2, test05, test05)
+    var test07 = Array(1.0,2.0,3.0)
+    println(test07.toList)
+    brzAxpy(1.0, test005, test005)
+    val test06 = computeGrad(test05, 1.0, test05)
+    //if (test055.length > 0)
+    //  test05 = conArrToMV(conBVToArray(test055))
+    println(test06)
+    println(test005)
+    println(s"test07 value: ${test07.toList}")
+
+  }
+}
+
