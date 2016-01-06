@@ -1,0 +1,225 @@
+/**
+ * Created by Administrator on 2015/12/27. talk is cheap, show me the code.
+ * 本代码是用来研究logistic Regression二分类实现的，所以难免简陋。实现过程，基本参考spark官方的实现。
+ * 首选明确LR的gradient的迭代公式
+ * 针对y={0,1},而非{-1， 1} 重新推导下LR的公式，并依据此公式进行code，否则依据后者会导致实际计算发生错误。
+ * (y^ -y)x + lambda * theta (lambda：引入了正则化项)   其中 y^ = 1 / (1 + exp(-1 * (theta dot x)))
+ * theta(k+1) = theta(k) - (sum)alpha * (y^ -y)x
+ * 由于spark 官方的一些method不能公有访问，所以需要自己定义，比如Spark Vector的 dot、axpy、fromBreeze等
+ * 关于spark LR官方的实现，主要分为4大部分：
+ * 1：先计算梯度gradient，对应的官方文档：Gradient.scala  =>  本文的函数computeGrad
+ * 2：根据1更新梯度，对应的官方文档：Updater.scala   =>  本文的3中的updater
+ * 3：对两步进行分装，其中对1的梯度进行分布式计算（executor），对2的梯度进行driver端的更新，对应的官方文档：GradientDescent.scala  =>  本文的函数gradientDescent
+ * 4：对上述进行封装，其中class LogisticRegressionWithSGD.optimizer 实现对GradientDescent的调用，
+ * 并class LogisticRegressionWithSGD继承class GeneralizedLinearAlgorithm.run方法来训练模型Model
+ */
+import breeze.linalg.{ DenseVector => BDV, Vector => BV, axpy => brzAxpy, norm => brzNorm }
+import org.apache.spark.mllib.regression.LabeledPoint
+//import org.apache.spark.mllib.linalg.BLAS.dot //私有的，不能访问
+import org.apache.spark.mllib.linalg.{DenseVector, Vectors, Vector, SparseVector}
+import org.apache.spark.rdd.RDD
+import scala.math._
+import breeze.optimize._
+import breeze.linalg._
+import org.apache.spark.SparkContext
+import java.util.Random
+import org.apache.spark.mllib.util.MLUtils._
+
+object wolfe_linesearch {
+
+  //定义内积，最好不要随便改变已习惯的用法
+  def compDot(v1: Vector, v2: Vector): Double = {
+   conArrToBV(conMVToArray(v1)) dot conArrToBV(conMVToArray(v2))
+  }
+
+  //定义将mllib的Vector，转变为breeze的Vector，分两步进行：先mllib的Vector转换为数组，再将数组转换为breeze的BDV
+  def conMVToArray(v1: Vector) = v1.toDense.values
+  def conArrToBV(arr1: Array[Double]):BDV[Double] = new BDV(arr1)
+  //def test08 = conArrToBV(conMVToArray(test05))
+
+  //定义将breeze的Vector转换为mllib中的Vector，分两步，先讲breeze的Vector转换为数组，再将数组转变为mllib的Vector
+  def conBVToArray(v1: BV[Double]):Array[Double] = v1.toArray.map(a => a.toDouble)
+  //def conBVToArrayInt(v1: BDV[Int]):Array[Double] = v1.toArray.map(a => a.toDouble)
+  def conArrToMV(arr1: Array[Double]):DenseVector = new DenseVector(arr1)
+  //def test08 = conArrToMV(conBVToArrayInt(test03))
+
+def compAxpy(multip: Double, v1: Vector, v2: Vector) = {
+  brzAxpy(multip, conArrToBV(conMVToArray(v1)), conArrToBV(conMVToArray(v2)))
+  }
+
+   // 计算梯度：只涉及logistic Regression的二分类。
+  // (y^ -y)x + lambda * theta (lambda：引入了正则化项)   其中 y^ = 1 / (1 + exp(-1 * (theta dot x)))
+  // 目前暂定，不返回loss值，因为自己还没有搞懂，看了下spark官方的是实现和自己推导的公式不一致
+  def computeGrad(data: Vector, label: Double, weights: Vector): Vector = {
+    val cumGrad = Vectors.zeros(weights.size)
+    computeGrad(data, label, weights, cumGrad)
+    cumGrad
+  }
+
+  def computeGrad(data: Vector, label: Double, weights: Vector, cumGradient: Vector): Unit = {
+    val margin = -1.0 * compDot(data, weights)
+    val multiplier = (1.0 / (1.0 + exp(margin))) - label
+    compAxpy(multiplier, data, cumGradient)
+  }
+
+  //val test06 = computeGrad(test05, 1.0, test05)
+
+  // 更新权重weights
+  // 定义一个简单的updater：设置stepSize的值为stepSize / sqrt(iter)
+  def simpleUpdater(weightsOld: Vector, gradient: Vector, stepSize: Double, iter: Int, regParam: Double):(Vector, Double) = {
+    val thisIterStepSize = stepSize / sqrt(iter)
+    compAxpy(-thisIterStepSize, gradient, weightsOld)
+    (weightsOld, 0.0)
+  }
+
+  //定义L1 updater：这部分基本copy官方的spark
+  // if w > shrinkageVal, then set weight component to w - shrinkageVal
+  // if w < -shrinkageVal, then set weight comp0nent to w + shrinkageVal
+  // if -shrinkageVal < w < shrinkageVal, then set weight component  to 0
+  // the above is equivalent to the form: signum(w) * max(0.0, abs(w) - shrinkageVal)
+  def L1Updater(weightsOld: Vector, gradient: Vector, stepSize: Double, iter: Int, regParam: Double): (Vector, Double) = {
+    val thisStepSize = stepSize / sqrt(iter)
+    compAxpy(-thisStepSize, gradient, weightsOld)
+    val shrinkageVal = regParam * thisStepSize
+    var weightsBrz = conArrToBV(conMVToArray(weightsOld))
+    //还是while写吧
+    var i = 0
+    while(i < weightsBrz.size) {
+      val wi = weightsBrz(i)
+      weightsBrz(i) = signum(wi) * math.max(0, abs(wi) - shrinkageVal)
+      i += 1
+    }
+    (conArrToMV(conBVToArray(weightsBrz)), brzNorm(weightsBrz, 1.0) * regParam)
+  }
+
+  //定义L2 updater：这部分同样copy 官方的spark
+  // w^ = w - thisIterStepSize * (gradient + regParam * w)
+  // w^ = (1 - thisIterStepSize * regParam) * w - thisIterStepSize * gradient
+  def SquaredL2Updater(weightsOld: Vector, gradient: Vector, stepSize: Double, iter: Int, regParam: Double): (Vector, Double) = {
+    val thisIterStepSize = stepSize / sqrt(iter)
+    val brzWeightsOld = conArrToBV(conMVToArray(weightsOld)) //转换为breeze的Vector
+    val brzWeightsFinal = (1.0 - thisIterStepSize * regParam) * brzWeightsOld
+    compAxpy(-thisIterStepSize, gradient, conArrToMV(conBVToArray(brzWeightsFinal))) //依然为breeze的Vector
+    //val norm = brzNorm(brzWeightsFinal) //默认为norm(x, 2.0)
+    val norm = brzNorm(brzWeightsFinal, 2.0)
+    (conArrToMV(conBVToArray(brzWeightsFinal)), 0.5 * norm * norm)
+  }
+
+  //尝试写一个wolfe 的 line search，不再像上面那样简单的指定thisIterStepSize
+  // 关于f'、q'的公式推导不一定正确（未经别人检验）
+  // f(x) = 1 / (1 + exp(-1 * (x dot weights)))    f'(x) = -(exp(weights dot x) * x) / (1 + exp(weights dot x))^2
+  // q(t) = f(x + t * p) = 1 / (1 + exp(-1 * ((x + t * p) dot weights)))
+  // q'(t) = -(exp(weights dot (x + t * p)) * (weights dot p)) / (1 + exp(weights dot x))^2
+  // 1. f(x_k + t * p_k) <= m1 * t * (f'(x_k) dot p_k)，亦即q(t) <= q(0) + m1 * t * q'(0)
+  // 2. (f'(x_k + t * p_k) dot p_k) >= m2 * (f'(x_k) dot p_k)， 亦即q'(t) >= m2 * q'(0)
+  // 先弃了吧，2015-12-31
+  /*
+  def wolfe_linesearch(data: DenseVector, label: Double, weights: DenseVector): Double = {
+    def g(x: BDV[Double]) = 1 / (1 + exp(-1 * (x dot weights)))
+    g(BDV(0.,0.,0.))
+  }
+  */
+
+  def gradientDescent(data: RDD[(Double, Vector)], stepSize: Double, numIterations: Int, regParam: Double,
+                      miniBatchFraction: Double, initialWeights: Vector, convergenceTol: Double): Vector = {
+    var weights = Vectors.dense(initialWeights.toArray)
+    val n = weights.size
+    var previousWeights: Option[Vector] = None
+    var currentWeights: Option[Vector] = None
+    var converged = false
+    var i = 1
+    while(!converged && i <= numIterations) {
+      val bcWeights = data.context.broadcast(weights)
+      //Sample a subset (fraction miniBatchFraction) of the total data
+      //compute and sum up the subgradients on this subset (this is one map-reduce)
+      val (gradientSum, miniBatchSize) = data.sample(false, miniBatchFraction, 42 + i).
+      treeAggregate((BDV.zeros[Double](n), 0L)) (
+        seqOp = (c, v) => {
+          // c: (grad, count), v: (label, features)
+          computeGrad(v._2, v._1, bcWeights.value, conArrToMV(conBVToArray(c._1)))
+          (c._1, c._2 + 1)
+        },
+        combOp = (c1, c2) => {
+          //c: (grad, count)
+          (c1._1 += c2._1, c1._2 + c2._2)
+        }
+      )
+
+      if(miniBatchSize > 0) {
+        val update = SquaredL2Updater(weights, conArrToMV(conBVToArray(gradientSum / miniBatchSize.toDouble)), stepSize, i, regParam)
+        weights = update._1
+        previousWeights = currentWeights
+        currentWeights = Some(weights)
+        if (previousWeights != None && currentWeights != None) {
+          converged = isConverged(previousWeights.get, currentWeights.get, convergenceTol)
+        }
+      }
+      i += 1
+    }
+    weights
+  }
+
+  def isConverged(previousWeights: Vector, currentWeights: Vector, convergenceTol: Double): Boolean = {
+    val previousBDV = conArrToBV(conMVToArray(previousWeights)).toDenseVector
+    val currentBDV = conArrToBV(conMVToArray(currentWeights)).toDenseVector
+    //This represents the difference of updated weights in the iteration
+    val solutionVecDiff = norm(previousBDV - currentBDV)
+    solutionVecDiff < convergenceTol * math.max(norm(currentBDV), 1.0)
+  }
+
+  /*
+  case class DataPointLR(x: Vector, y: Double)
+  def generateDataLR(nexamples: Int, nfeatures: Int, eps: Double): Array[DataPointLR] = {
+    def generatePoint(i: Int): DataPointLR = {
+      val rand = new Random(42 + i)
+      val y = if (i % 2 == 0) 0 else 1
+      val x = BDV.fill(nfeatures){rand.nextGaussian + y * eps}
+      DataPointLR(conArrToMV(conBVToArray(x)), y)
+    }
+    Array.tabulate(nexamples)(generatePoint)
+  }
+  */
+
+  def generateLogisticRDD(sc: SparkContext, nexamples: Int, nfeatures: Int, eps: Double, nparts: Int = 2): RDD[LabeledPoint] = {
+    val data = sc.parallelize(0 until nexamples, nparts).map {
+      idx => {
+        val rand = new Random(42 + idx)
+        val y = if (idx % 2 == 0) 0.0 else 1.0
+        val x = Array.fill(nfeatures){rand.nextGaussian() + y * eps}
+        LabeledPoint(y, Vectors.dense(x))
+      }
+    }
+    data
+  }
+
+
+  def main (args: Array[String]) {
+
+    //设置sc
+    val sparkMaster: String = args(0)
+    val sc = new SparkContext(sparkMaster, "LogisticRegression")
+
+    //设置生成数据的参数
+    val nexamples = 10000
+    val nfeatures = 10
+    val eps = 0.6
+    val input = generateLogisticRDD(sc,nexamples, nfeatures, eps)
+
+    //设置生成梯度gradient的参数
+    val stepSize = 1
+    val numIterations = 100
+    val regParam = 0.0
+    val miniBatchFraction: Double = 1.0
+    val initialWeights = Vectors.zeros(nfeatures)
+    val convergenceTol: Double = 0.001
+
+    //将RDD[LabeledPoint]转换成RDD[(Double, Vector)]
+    val data = input.map(lp => (lp.label, appendBias(lp.features))).cache()
+    //val data = input.map(lp => (lp.label, lp.features)).cache()
+    //得到梯度gradient
+    val trainModelLR: Vector =  gradientDescent(data, stepSize, numIterations, regParam, miniBatchFraction, initialWeights, convergenceTol)
+    println(trainModelLR.toString)
+
+  }
+}
+
