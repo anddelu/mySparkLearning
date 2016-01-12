@@ -1,11 +1,132 @@
-先简单copy一个
-def quickSort(lst: List[Int]): List[Int] = {
-  if (lst.isEmpty) lst
-  else {
-    val p = lst.head
-    val (before, after) = lst.tail.partition(_ < p)
-    quickSort(before) ++ (p :: quickSort(after))
+/**
+ * Created by Administrator on 2016/1/8.
+ */
+object sortScala {
+  /**
+   * 本文中排序默认为从小到大的顺序来进行。
+   * 插入排序：就是从后面未排序的第一个元素UnSort(0)，往前面已排好序的数组Sorted里面插入：
+   * 若UnSort(0) < Sorted(-1)，这才发生真正的排序动作。
+   * eg: Array(6， 10， 5， 7)
+   * 第一次排序：由于 10 < 6 为假，故不发生排序的动作，这是数组中：排好序的为Array(6,10)， 未排好序的为Array(5,7)
+   * 第二次排序：由于 5 < 10 为真，触发排序动作：1：先交换 5 和 10，变成5， 10；
+   * 第二步：由于5 < 6为真，又触发排序的动作，故交换 5 和 6， 变成5， 6；
+   * 第三步：由于5已经位于数组的首位，不需要在判断，因而转移到此刻未排序的数组Array(7)，
+   * 重复上面的逻辑判断，直到未排序的数组为空。
+   */
+  def insertSort(arr: Array[Int]): Array[Int] = {
+    val arrSize = arr.size
+    if (arr.size == 1) arr
+    else {
+      for (i <- 1 until arrSize) {
+        var j = i
+        while (j > 0 && arr(j) < arr(j-1)) {
+          var temp = arr(j)
+          arr(j) = arr(j-1)
+          arr(j-1) = temp
+          j -= 1
+        }
+      }
+      arr
+    }
   }
-  
+
+  /**
+   * 冒泡排序：每次巡回i，找到最大的元素，并放在数组的Array(-i)，在巡回的过程中，比较大小交换元素的值
+   * eg: Array(6， 10， 5， 7)
+   * 第一次巡回：由于 6 < 10 为真，故不发生交换动作，接着比较：10 > 5，需要交换他俩的位置为5， 10，
+   * 又由于10 > 7，交换元素，7为数组的最后一个元素，则本次的巡回结束。最后的数组结果为：Array(6, 5, 7, 10)
+   * 第二次巡回：由于第一次巡回，数组的最大元素已经放好，所以这次巡回的数组长度减一，即arrSize-1
+   * 重复上面的逻辑判断，直到最后一次巡回的数组长度为1。
+   */
+  def bubbleSort(arr: Array[Int]): Array[Int] = {
+    var arrSize = arr.size
+    var k = arrSize
+    for (i <- 0 until k) {
+      var j = i
+      while(j < k-1) {
+        if (arr(j) > arr(j+1)) {
+          var temp = arr(j+1)
+          arr(j+1) = arr(j)
+          arr(j) = temp
+        }
+        j += 1
+      }
+      k -= 1
+    }
+    arr
+  }
+
+
+  def swapArr(arr: Array[Int], a: Int, b: Int): Array[Int] = {
+    var temp = arr(a)
+    arr(a) = arr(b)
+    arr(b) = temp
+    arr
+  }
+
+
+  def quickSort(arr: Array[Int]): Array[Int] = {
+    arr match {
+      case a if a.length <= 1 => a
+      case a if a.length == 2 => {
+        if (a(0) > a(1)) {
+         swapArr(a, 0, 1)
+        } else a
+      }
+      case a if a.length > 2 => {
+        val (left, right) = a.tail.partition(_ < a.head)
+        quickSort(left) ++ a.slice(0, 1) ++ quickSort(right)
+        //下面的句式会报错，未明白
+        //val (left, right) = a.partition(_ < a.head)
+        //quickSort(left) ++ quickSort(right)
+      }
+    }
+  }
+
+
+  def fibonacci(a: Int, b: Int, n: Int): Int = {
+    if (n <= 2) b
+    else fibonacci(b, a+b, n-1)
+  }
+
+  //基本来自https://gist.github.com/songpp/899322
+  //注意sort 其实是快速排序，但与之前的相比，返回值为Unit
+  def sort(arr: Array[Int],start: Int = 0, end: Int) {
+    def partition(from: Int = 0, to: Int): Int = {
+      val x = arr(to)
+      var i = from - 1
+      for (j <- from until to) {
+        if (arr(j) <= x) {
+          i = i + 1
+          swapArr(arr, i, j)
+        }
+      }
+     swapArr(arr, i + 1, to)
+     i + 1
+    }
+
+    if (start < end) {
+      val m = partition(start, end)
+      sort(arr, start, m - 1)
+      sort(arr, m + 1, end)
+    }
+
+  }
+
+
+  def main (args: Array[String]) {
+    val arr = Array(10, 5, 20, 3, 7, 2, 60, 1)
+    val arr1 = Array(10, 20, 12, 5, 1, 6, 3, 21, 7, 16, 2, 15, 8, 11)
+    val arr2 = Array(10, 20, 12, 5, 1, 6, 3, 21, 7, 16, 2, 15, 8, 11, 17)
+    println(s"insertSort: ${insertSort(arr).toList}")
+    println(s"bubbleSort: ${bubbleSort(arr1).toList}")
+    //println(s"arr: ${arr1.toList}")
+    //println(arr1.toList)
+    println(s"the n element of fibonacci is: ${fibonacci(0,1,9)}")
+    println(s"quickSort: ${quickSort(arr2).toList}")
+
+    val arr3 = Array(6, 7, 3, 2, 5)
+    sort(arr3, end = arr3.length - 1)
+    println(s"quickSort: ${arr3.toList}")
+  }
 }
-quickSort(List(5,3,4,1,6,2))
