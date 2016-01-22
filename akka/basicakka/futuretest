@@ -1,0 +1,61 @@
+/**
+ * Created by Administrator on 2016/1/22.
+ * 摘抄自 Scala CookBook 中的关于 concurrency 部分
+ */
+
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.{Failure, Success}
+import scala.util.Random
+
+object Cloud {
+  def runAlgorithm(n: Int): Future[Int] = Future {
+    Thread.sleep(Random.nextInt(500))
+    val result = n + 10
+    /*
+    val RANGE = 100000
+    var result = 0
+    for (i <- Range(RANGE * (n - 1), (RANGE / 4) * n  + 1)) {
+      for (j <- 1 to 300000) {}  //还是不能设置太大，但只有一个flag运行出结果，其他的flag的觉得在打酱油，即单线程执行而非并发执行
+      result += i
+    }
+    */
+    println(s"returning result from cloud: $result, flag: $n")
+    result
+  }
+}
+
+object RunningMultipleCalcs extends App {
+  println("starting futures")
+  val result1 = Cloud.runAlgorithm(1)
+  val result2 = Cloud.runAlgorithm(2)
+  val result3 = Cloud.runAlgorithm(3)
+  val result4 = Cloud.runAlgorithm(4)
+
+  println("before for-comprehension")
+  val result = for {
+    r1 <- result1
+    r2 <- result2
+    r3 <- result3
+    r4 <- result4
+  } yield (r1 + r2 + r3 + r4)
+
+  println("before onSuccess")
+  /* // 注释的部分，与下面的是等价的
+  result onSuccess {
+    case result => println(s"total = $result")
+  }
+
+  result onFailure {
+    case t => println(s"Exception: ${t.getMessage}")
+  }
+  */ 
+  result.onComplete {
+    case Success(value) => println(s"total = $value")
+    case Failure(e) => println(s"Exception: ${e.printStackTrace()}") 
+  }
+
+  println("before sleep at the end")
+  Thread.sleep(100000)  // keep the jvm alive
+
+}
