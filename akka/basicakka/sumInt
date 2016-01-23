@@ -81,7 +81,8 @@ object sumInt {
     masterActor ! "calculate..."
 
     Thread.sleep(5000)
-    system.awaitTermination()
+    //由于已经在 MasterActor.receive.case 定义中的 Result里有 shutdown 了，因此下面的语句都可以注释掉了
+    //system.awaitTermination()
     //上一句替换了原文章中的system.shutdown，并把该句挪到 MasterActor.receive.case 定义中的 Result里，不然会一直等待吧。
     //system.shutdown()
 
