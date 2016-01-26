@@ -79,7 +79,10 @@ class Master(data: String, numWorker: Int = 4) extends Actor {
 
     case Reduce(partData) => {
       println("received one res")
-      totalRes = mergeRes(totalRes, partData)
+      // 可以调用 mergeRes 函数来完成 对每个分区已经聚合好的数据，再次进行聚合，
+      // 但本例采取了 map 来调用一个匿名函数，来完成相应的功能，代码量少，但清晰度不如 mergeRes
+      //totalRes = mergeRes(totalRes, partData)
+      partData map (x => totalRes += ((x._1, partData.getOrElse(x._1, 0) + x._2)))
 
       receivedMsg += 1
       if (receivedMsg == numWorker) {
@@ -95,7 +98,7 @@ class Master(data: String, numWorker: Int = 4) extends Actor {
   def mergeRes(allData: HashMap[String, Int], partData: HashMap[String, Int]): HashMap[String, Int] = {
     for(a <- partData) {
       val numExisted = allData.getOrElse(a._1, 0)
-      val newNum = numExisted + 1
+      val newNum = numExisted + a._2
       allData.put(a._1, newNum)
     }
     allData
