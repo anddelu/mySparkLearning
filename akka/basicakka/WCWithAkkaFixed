@@ -1,0 +1,125 @@
+/**
+ * Created by Administrator on 2016/1/26.
+ * 用akka简易实现Wordcount（基于WCWithAkka的基础进行修改）
+ * 文章链接，如下：
+ * http://www.jiancool.com/article/11455438596/
+ */
+import akka.actor.ActorSystem
+import akka.actor.Actor
+import akka.actor.ActorRef
+import akka.actor.Props
+import akka.routing.RoundRobinPool
+
+import scala.collection.mutable.HashMap
+import scala.concurrent.duration.{Duration, _}
+
+sealed trait wcMessage
+case class FinalRes(du: Duration, res: String) extends wcMessage
+
+case object Map extends wcMessage
+case class Task(splitedData: Array[String]) extends wcMessage
+case class Reduce(partData: HashMap[String, Int]) extends wcMessage
+
+class Listener extends Actor {
+  def receive = {
+    case FinalRes(du, result) => {
+      println("\n\tCalculation time: \t%s".format(du))
+      println("\n\tResult: \t%s".format(result))
+      context.system.shutdown()
+    }
+    case _ => println("未知 in Listener Actor!")
+  }
+}
+
+class Worker extends Actor {
+  def wordCount(data: Array[String]): HashMap[String, Int] = {
+    val count = new HashMap[String, Int]()
+    data.foreach(word => {
+      val numExisted = count.getOrElse(word, 0)
+      val newNum = numExisted + 1
+      count.put(word, newNum)
+    })
+    count
+  }
+  def receive = {
+    case Task(splitedData) => {
+      println("one to work")
+      sender ! Reduce(wordCount(splitedData))
+    }
+    case _ => println("未知 in Worker Actor!")
+  }
+}
+
+class Master(data: String, numWorker: Int = 4) extends Actor {
+  val dataArray = data.split(" ")
+  val sumSize = dataArray.size
+  val jobPerWork = sumSize / numWorker
+
+  val workerRouter: ActorRef = context.actorOf(Props[Worker].withRouter(RoundRobinPool(nrOfInstances = numWorker)), name = "workerRouterActor")
+  val listener: ActorRef = context.actorOf(Props[Listener], name = "listenerActor")
+
+  var totalRes = new HashMap[String, Int]()
+  var receivedMsg = 0
+  val start: Long = System.currentTimeMillis
+
+  def receive = {
+    case Map => {
+      println("begin to map")
+      for (i <- 1 to numWorker) {
+        var endIndex = 0
+        if (i == numWorker) {
+          endIndex = sumSize
+        } else endIndex = i * jobPerWork
+
+        val sendData = dataArray.slice((i - 1) * jobPerWork, endIndex)
+        println(s"send worker $i to work")
+        workerRouter ! Task(sendData)
+      }
+    }
+
+    case Reduce(partData) => {
+      println("received one res")
+      totalRes = mergeRes(totalRes, partData)
+
+      receivedMsg += 1
+      if (receivedMsg == numWorker) {
+        println("all job finished!")
+        listener ! FinalRes(du = (System.currentTimeMillis - start).millis, totalRes.toList.toString)
+        // stop this actor and all its supervised children
+        context.stop(self)
+      }
+    }
+    case _ => println("未知 in Master Actor!")
+  }
+
+  def mergeRes(allData: HashMap[String, Int], partData: HashMap[String, Int]): HashMap[String, Int] = {
+    for(a <- partData) {
+      val numExisted = allData.getOrElse(a._1, 0)
+      val newNum = numExisted + 1
+      allData.put(a._1, newNum)
+    }
+    allData
+  }
+}
+
+object WCWithAkkaFixed extends App {
+  // original data
+  val data = "hello world hello this is my first akka app plz use scala Cause scala is really smart " +
+    "I have used it so far in two real projects very successfully. both are in the near real-time traffic " +
+    "information field (traffic as in cars on highways), distributed over several nodes, integrating messages"
+  // create system actor
+  val _system = ActorSystem("WordcountWithAkka")
+  println("begin")
+
+  // create master
+  val master = _system.actorOf(Props(new Master(data, 4)), name = "WCMaster")
+  println("master inited!")
+
+  // begin to calculate
+  println("begin to calculate")
+  master ! Map
+
+  Thread.sleep(1000)
+}
+
+
