@@ -1,0 +1,143 @@
+/**
+ * Created by Administrator on 2016/1/26.
+ * 来源见如下的链接：
+ * https://github.com/anddelu/Akka-Essentials/tree/master/FirstAkkaApplication/src/main/scala/akka/first/app/scala/actors
+ * 注意，这部分的部分变量名与 sumInt.scala 重名，所以在此的处理情况为变量名加1，即: variablename1
+ * 可以简单理解为 WCWithAkkaFixed 版本的单个的 Router 版本，但这个版本定义计算过程的更清晰，更容易理解
+ */
+
+
+//import akka.actor.actorRef2Scala
+import akka.actor.{Actor, ActorSystem, ActorRef, Props}
+
+import java.util.StringTokenizer
+
+import scala.collection.mutable.HashMap
+
+case class Word(word:String, count:Int)
+case object Result1
+case class MapData(dataList: List[Word])
+case class ReduceData(reduceDataMap: HashMap[String, Int])
+
+
+class MapActor(reduceActor: ActorRef) extends Actor {
+
+  val STOP_WORDS_LIST = List("a", "am", "an", "and", "are", "as", "at", "be",
+    "do", "go", "if", "in", "is", "it", "of", "on", "the", "to")
+
+  val defaultCount: Int = 1
+
+  def receive = {
+    case message: String =>
+      reduceActor ! evaluateExpression(message)
+  }
+  def evaluateExpression(line: String): MapData = {
+    var dataList = List[Word]()
+    var parser: StringTokenizer = new StringTokenizer(line)
+    while (parser.hasMoreTokens()) {
+      var word: String = parser.nextToken().toLowerCase()
+      if (!STOP_WORDS_LIST.contains(word)) {
+        dataList = Word(word, defaultCount) :: dataList
+      }
+    }
+    MapData(dataList)
+  }
+}
+
+
+
+class ReduceActor(aggregateActor: ActorRef) extends Actor {
+
+  val defaultCount: Int = 1
+  def receive: Receive = {
+    case message: MapData =>
+      aggregateActor ! reduce(message.dataList)
+  }
+
+  def reduce(dataList: List[Word]): ReduceData = {
+    var reducedMap = new HashMap[String, Int]
+    // 可以用 foreach 来代替下面的 for loop
+    /*
+    for (wc: Word <- dataList) {
+      var word: String = wc.word
+      if (reducedMap.contains(word)) {
+        var count:Int = reducedMap.get(word).get + defaultCount
+        reducedMap += word -> count
+      } else {
+        reducedMap += word -> defaultCount
+      }
+    }
+    */
+    dataList.foreach{ case Word(word, cnt) =>
+      reducedMap += word -> (reducedMap.getOrElse(word, 0) + 1)
+      //reducedMap += ((word, reducedMap.getOrElse(word, 0) + 1))
+    }
+    ReduceData(reducedMap)
+  }
+}
+
+
+class AggregateActor extends Actor {
+
+  var finalReducedMap = new HashMap[String, Int]()
+
+  def receive = {
+    case message: ReduceData =>
+      aggregateInMemoryReduce(message.reduceDataMap)
+    case Result1 =>
+      println(finalReducedMap.toString())
+  }
+
+  def aggregateInMemoryReduce(reducedMap: HashMap[String, Int]) {
+   /*
+    var count: Int = 0
+    reducedMap.foreach((entry: (String, Int)) =>
+      if (finalReducedMap.contains(entry._1)) {
+        count = entry._2 + finalReducedMap.get(entry._1).get
+        finalReducedMap += entry._1 -> count
+      } else
+        finalReducedMap += entry._1 -> entry._2)
+   */
+   reducedMap.foreach { case(word, cnt) =>
+     finalReducedMap += word -> (finalReducedMap.getOrElse(word, 0) + cnt)
+   }
+  }
+}
+
+
+class MasterActor1 extends Actor {
+
+  val aggregateActor: ActorRef = context.actorOf(Props[AggregateActor], name = "aggregate")
+  val reduceActor: ActorRef = context.actorOf(Props(new ReduceActor(aggregateActor)), name = "reduce")
+  val mapActor: ActorRef = context.actorOf(Props(new MapActor(reduceActor)), name = "map")
+
+  def receive: Receive = {
+    case message: String =>
+      mapActor ! message
+    case Result1 =>
+      aggregateActor ! Result1
+  }
+}
+
+
+object WordCountSimple {
+
+  def main(args: Array[String]) {
+    val _system = ActorSystem("WordCountSimple")
+    val master = _system.actorOf(Props[MasterActor1], name = "master")
+
+    master ! "The quick brown fox tried to jump over the lazy dog and fell on the dog"
+    master ! "Dog is man's best friend"
+    master ! "Dog and Fox belong to the same family"
+
+    Thread.sleep(500)
+    master ! Result1
+
+    Thread.sleep(500)
+    _system.shutdown
+    println("Job is done!")
+  }
+}
+
+
+
