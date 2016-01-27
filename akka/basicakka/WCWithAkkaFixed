@@ -4,10 +4,7 @@
  * 文章链接，如下：
  * http://www.jiancool.com/article/11455438596/
  */
-import akka.actor.ActorSystem
-import akka.actor.Actor
-import akka.actor.ActorRef
-import akka.actor.Props
+import akka.actor.{Actor, ActorSystem, ActorRef, Props}
 import akka.routing.RoundRobinPool
 
 import scala.collection.mutable.HashMap
@@ -16,9 +13,9 @@ import scala.concurrent.duration.{Duration, _}
 sealed trait wcMessage
 case class FinalRes(du: Duration, res: String) extends wcMessage
 
-case object Map extends wcMessage
+case object Mapper extends wcMessage
 case class Task(splitedData: Array[String]) extends wcMessage
-case class Reduce(partData: HashMap[String, Int]) extends wcMessage
+case class Reducer(partData: HashMap[String, Int]) extends wcMessage
 
 class Listener extends Actor {
   def receive = {
@@ -44,7 +41,7 @@ class Worker extends Actor {
   def receive = {
     case Task(splitedData) => {
       println("one to work")
-      sender ! Reduce(wordCount(splitedData))
+      sender ! Reducer(wordCount(splitedData))
     }
     case _ => println("未知 in Worker Actor!")
   }
@@ -63,7 +60,7 @@ class Master(data: String, numWorker: Int = 4) extends Actor {
   val start: Long = System.currentTimeMillis
 
   def receive = {
-    case Map => {
+    case Mapper => {
       println("begin to map")
       for (i <- 1 to numWorker) {
         var endIndex = 0
@@ -77,12 +74,12 @@ class Master(data: String, numWorker: Int = 4) extends Actor {
       }
     }
 
-    case Reduce(partData) => {
+    case Reducer(partData) => {
       println("received one res")
       // 可以调用 mergeRes 函数来完成 对每个分区已经聚合好的数据，再次进行聚合，
-      // 但本例采取了 map 来调用一个匿名函数，来完成相应的功能，代码量少，但清晰度不如 mergeRes
+      // 但本例采取了 foreach 来调用一个匿名函数，来完成相应的功能，代码量少，但清晰度不如 mergeRes
       //totalRes = mergeRes(totalRes, partData)
-      partData map (x => totalRes += ((x._1, partData.getOrElse(x._1, 0) + x._2)))
+      partData foreach (x => totalRes += ((x._1, partData.getOrElse(x._1, 0) + x._2)))
 
       receivedMsg += 1
       if (receivedMsg == numWorker) {
@@ -120,7 +117,7 @@ object WCWithAkkaFixed extends App {
 
   // begin to calculate
   println("begin to calculate")
-  master ! Map
+  master ! Mapper
 
   Thread.sleep(1000)
 }
