@@ -18,9 +18,19 @@ class SumActor extends Actor {
 
   def calculate(start: Int, end: Int, flag: String): Int = {
     var cal = 0
+    // 将下面的for loop改为while loop，嵌套的for 改为 while后，在自己的机器上，之前80s左右，立马变为6s之内。
+    /*
     for (i <- (start to end)) {
       for (j <- 1 to 3000000) {}
       cal += i
+    }
+    */
+    var i = start
+    while (i <= end) {
+      var j = 0
+      while (j < 3000000) {j += 1}
+      cal += i
+      i += 1
     }
     println("flag: " + flag + ".")
     cal
